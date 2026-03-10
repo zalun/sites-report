@@ -209,30 +209,63 @@ def test_fetch_top_pages_returns_empty_list_when_no_rows(
     assert result == []
 
 
+# -- response shape errors --
+
+
+@mock.patch(_PATCH_CLIENT)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_raises_on_missing_metric_column(
+    mock_creds: MagicMock, mock_client_cls: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_client_cls)
+    row = _make_row(metric_values=["100", "80", "40"])
+    collector._client.run_report.return_value = _make_response([row])
+
+    with pytest.raises(CollectorError, match="missing metric"):
+        collector.fetch(_make_project(), _DATE)
+
+
+@mock.patch(_PATCH_CLIENT)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_top_pages_raises_on_missing_dimension(
+    mock_creds: MagicMock, mock_client_cls: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_client_cls)
+    row = _make_row(dimension_values=[], metric_values=["200", "150", "45.2"])
+    collector._client.run_report.return_value = _make_response([row])
+
+    with pytest.raises(CollectorError, match="missing pagePath dimension"):
+        collector.fetch_top_pages(_make_project(), _DATE)
+
+
 # -- _parse_metric_value --
 
 
 def test_parse_metric_value_integer_column() -> None:
-    assert _parse_metric_value("42", "sessions") == 42
+    assert _parse_metric_value("42", "sessions", int) == 42
 
 
 def test_parse_metric_value_float_column() -> None:
-    assert _parse_metric_value("3.14", "avg_session_duration") == 3.14
+    assert _parse_metric_value("3.14", "avg_session_duration", float) == 3.14
+
+
+def test_parse_metric_value_zero_string() -> None:
+    assert _parse_metric_value("0", "sessions", int) == 0
 
 
 def test_parse_metric_value_empty_string() -> None:
-    assert _parse_metric_value("", "sessions") is None
+    assert _parse_metric_value("", "sessions", int) is None
 
 
 def test_parse_metric_value_not_set() -> None:
-    assert _parse_metric_value("(not set)", "sessions") is None
+    assert _parse_metric_value("(not set)", "sessions", int) is None
 
 
 def test_parse_metric_value_raises_on_malformed_int() -> None:
     with pytest.raises(CollectorError, match="Cannot parse GA4 metric"):
-        _parse_metric_value("N/A", "sessions")
+        _parse_metric_value("N/A", "sessions", int)
 
 
 def test_parse_metric_value_raises_on_malformed_float() -> None:
     with pytest.raises(CollectorError, match="Cannot parse GA4 metric"):
-        _parse_metric_value("not-a-number", "avg_session_duration")
+        _parse_metric_value("not-a-number", "avg_session_duration", float)

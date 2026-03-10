@@ -20,20 +20,20 @@ from sites_report.config import GoogleConfig, ProjectConfig
 
 logger = logging.getLogger(__name__)
 
-_DAILY_METRICS: dict[str, str] = {
-    "sessions": "sessions",
-    "totalUsers": "users",
-    "newUsers": "new_users",
-    "screenPageViews": "pageviews",
-    "averageSessionDuration": "avg_session_duration",
-    "bounceRate": "bounce_rate",
-    "conversions": "conversions",
+_DAILY_METRICS: dict[str, tuple[str, type]] = {
+    "sessions": ("sessions", int),
+    "totalUsers": ("users", int),
+    "newUsers": ("new_users", int),
+    "screenPageViews": ("pageviews", int),
+    "averageSessionDuration": ("avg_session_duration", float),
+    "bounceRate": ("bounce_rate", float),
+    "conversions": ("conversions", int),
 }
 
-_TOP_PAGES_METRICS: dict[str, str] = {
-    "screenPageViews": "pageviews",
-    "sessions": "sessions",
-    "averageSessionDuration": "avg_time_on_page",
+_TOP_PAGES_METRICS: dict[str, tuple[str, type]] = {
+    "screenPageViews": ("pageviews", int),
+    "sessions": ("sessions", int),
+    "averageSessionDuration": ("avg_time_on_page", float),
 }
 
 _GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
@@ -100,11 +100,18 @@ class GA4Collector(Collector):
         self, response: RunReportResponse
     ) -> dict[str, int | float | str | None]:
         if not response.rows:
-            return {db_col: None for db_col in _DAILY_METRICS.values()}
+            return {db_col: None for db_col, _typ in _DAILY_METRICS.values()}
         row = response.rows[0]
         result: dict[str, int | float | str | None] = {}
-        for i, (_api_name, db_col) in enumerate(_DAILY_METRICS.items()):
-            result[db_col] = _parse_metric_value(row.metric_values[i].value, db_col)
+        for i, (_api_name, (db_col, typ)) in enumerate(_DAILY_METRICS.items()):
+            try:
+                raw = row.metric_values[i].value
+            except (IndexError, AttributeError) as exc:
+                logger.error("GA4 response missing metric at index %d (%s): %s", i, db_col, exc)
+                raise CollectorError(
+                    f"GA4 response missing metric '{db_col}' at index {i}"
+                ) from exc
+            result[db_col] = _parse_metric_value(raw, db_col, typ)
         return result
 
     def _parse_top_pages(
@@ -114,23 +121,33 @@ class GA4Collector(Collector):
             return []
         pages: list[dict[str, int | float | str | None]] = []
         for row in response.rows:
-            page: dict[str, int | float | str | None] = {
-                "page_path": row.dimension_values[0].value,
-            }
-            for i, (_api_name, db_col) in enumerate(_TOP_PAGES_METRICS.items()):
-                page[db_col] = _parse_metric_value(row.metric_values[i].value, db_col)
+            try:
+                page_path = row.dimension_values[0].value
+            except (IndexError, AttributeError) as exc:
+                logger.error("GA4 response missing pagePath dimension: %s", exc)
+                raise CollectorError("GA4 response missing pagePath dimension") from exc
+            page: dict[str, int | float | str | None] = {"page_path": page_path}
+            for i, (_api_name, (db_col, typ)) in enumerate(_TOP_PAGES_METRICS.items()):
+                try:
+                    raw = row.metric_values[i].value
+                except (IndexError, AttributeError) as exc:
+                    logger.error(
+                        "GA4 response missing metric at index %d (%s): %s", i, db_col, exc
+                    )
+                    raise CollectorError(
+                        f"GA4 response missing metric '{db_col}' at index {i}"
+                    ) from exc
+                page[db_col] = _parse_metric_value(raw, db_col, typ)
             pages.append(page)
         return pages
 
 
-def _parse_metric_value(raw: str, db_col: str) -> int | float | None:
+def _parse_metric_value(raw: str, db_col: str, target_type: type) -> int | float | None:
     """Convert GA4 metric string to appropriate Python type."""
     if not raw or raw == "(not set)":
         return None
     try:
-        if db_col in ("avg_session_duration", "bounce_rate", "avg_time_on_page"):
-            return float(raw)
-        return int(raw)
-    except ValueError as exc:
+        return target_type(raw)
+    except (ValueError, TypeError) as exc:
         logger.error("Cannot parse GA4 metric '%s'=%r: %s", db_col, raw, exc)
         raise CollectorError(f"Cannot parse GA4 metric '{db_col}' value {raw!r}: {exc}") from exc
