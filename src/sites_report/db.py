@@ -290,3 +290,147 @@ def get_db_status(db_path: Path) -> DbStatus:
         msg = f"Inconsistent database status: {exc}"
         logger.error(msg)
         raise DatabaseError(msg) from exc
+
+
+# ── Insert helpers ────────────────────────────────────────────────
+
+
+def insert_ga_daily(
+    db_path: Path, project_slug: str, date: str, data: dict[str, int | float | str | None]
+) -> None:
+    """Insert or replace a GA4 daily metrics row."""
+    conn = _connect(db_path)
+    try:
+        conn.execute(
+            """INSERT OR REPLACE INTO ga_daily
+               (project_slug, date, sessions, users, new_users, pageviews,
+                avg_session_duration, bounce_rate, conversions)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                project_slug,
+                date,
+                data.get("sessions"),
+                data.get("users"),
+                data.get("new_users"),
+                data.get("pageviews"),
+                data.get("avg_session_duration"),
+                data.get("bounce_rate"),
+                data.get("conversions"),
+            ),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        msg = f"Failed to insert ga_daily for '{project_slug}' on {date}: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
+    finally:
+        conn.close()
+
+
+def insert_gsc_daily(
+    db_path: Path, project_slug: str, date: str, data: dict[str, int | float | str | None]
+) -> None:
+    """Insert or replace a GSC daily metrics row."""
+    conn = _connect(db_path)
+    try:
+        conn.execute(
+            """INSERT OR REPLACE INTO gsc_daily
+               (project_slug, date, clicks, impressions, ctr, avg_position)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                project_slug,
+                date,
+                data.get("clicks"),
+                data.get("impressions"),
+                data.get("ctr"),
+                data.get("avg_position"),
+            ),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        msg = f"Failed to insert gsc_daily for '{project_slug}' on {date}: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
+    finally:
+        conn.close()
+
+
+def insert_ga_top_pages(
+    db_path: Path,
+    project_slug: str,
+    date: str,
+    pages: list[dict[str, int | float | str | None]],
+) -> None:
+    """Insert or replace GA4 top pages rows. Deletes existing rows for the slug+date first."""
+    conn = _connect(db_path)
+    try:
+        # DELETE + INSERT run in a single implicit transaction;
+        # conn.commit() applies both atomically.
+        conn.execute(
+            "DELETE FROM ga_top_pages WHERE project_slug = ? AND date = ?",
+            (project_slug, date),
+        )
+        conn.executemany(
+            """INSERT INTO ga_top_pages
+               (project_slug, date, page_path, pageviews, sessions, avg_time_on_page)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    project_slug,
+                    date,
+                    p.get("page_path"),
+                    p.get("pageviews"),
+                    p.get("sessions"),
+                    p.get("avg_time_on_page"),
+                )
+                for p in pages
+            ],
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        msg = f"Failed to insert ga_top_pages for '{project_slug}' on {date}: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
+    finally:
+        conn.close()
+
+
+def insert_gsc_top_queries(
+    db_path: Path,
+    project_slug: str,
+    date: str,
+    queries: list[dict[str, int | float | str | None]],
+) -> None:
+    """Insert or replace GSC top queries rows. Deletes existing rows for the slug+date first."""
+    conn = _connect(db_path)
+    try:
+        # DELETE + INSERT run in a single implicit transaction;
+        # conn.commit() applies both atomically.
+        conn.execute(
+            "DELETE FROM gsc_top_queries WHERE project_slug = ? AND date = ?",
+            (project_slug, date),
+        )
+        conn.executemany(
+            """INSERT INTO gsc_top_queries
+               (project_slug, date, query, clicks, impressions, ctr, position)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    project_slug,
+                    date,
+                    q.get("query"),
+                    q.get("clicks"),
+                    q.get("impressions"),
+                    q.get("ctr"),
+                    q.get("position"),
+                )
+                for q in queries
+            ],
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        msg = f"Failed to insert gsc_top_queries for '{project_slug}' on {date}: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
+    finally:
+        conn.close()
