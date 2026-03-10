@@ -120,9 +120,13 @@ class TableStatus:
         if self.row_count < 0:
             msg = "row_count must be non-negative"
             raise ValueError(msg)
-        has_dates = self.min_date is not None or self.max_date is not None
+        has_dates = (
+            self.min_date is not None
+            or self.max_date is not None
+            or self.last_fetched_at is not None
+        )
         if self.row_count == 0 and has_dates:
-            msg = "date fields must be None when row_count is 0"
+            msg = "date fields and last_fetched_at must be None when row_count is 0"
             raise ValueError(msg)
         if self.row_count > 0 and (
             self.min_date is None or self.max_date is None or self.last_fetched_at is None
@@ -148,7 +152,12 @@ class DbStatus:
 
 def _connect(db_path: Path) -> sqlite3.Connection:
     """Open a connection with WAL mode and foreign keys enabled."""
-    conn = sqlite3.connect(db_path)
+    try:
+        conn = sqlite3.connect(db_path)
+    except sqlite3.Error as exc:
+        msg = f"Cannot open database '{db_path}': {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
     try:
         result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
         if result is None or result[0].lower() != "wal":
@@ -248,15 +257,24 @@ def get_db_status(db_path: Path) -> DbStatus:
                 msg = f"Failed to query status for table '{table}': {exc}"
                 logger.error(msg)
                 raise DatabaseError(msg) from exc
-            statuses.append(
-                TableStatus(
-                    name=table,
-                    row_count=row[0],
-                    min_date=row[1],
-                    max_date=row[2],
-                    last_fetched_at=row[3],
+            if row is None:
+                msg = f"No result from status query for table '{table}'"
+                logger.error(msg)
+                raise DatabaseError(msg)
+            try:
+                statuses.append(
+                    TableStatus(
+                        name=table,
+                        row_count=row[0],
+                        min_date=row[1],
+                        max_date=row[2],
+                        last_fetched_at=row[3],
+                    )
                 )
-            )
+            except ValueError as exc:
+                msg = f"Invalid data in table '{table}': {exc}"
+                logger.error(msg)
+                raise DatabaseError(msg) from exc
     except DatabaseError:
         raise
     except sqlite3.Error as exc:
@@ -266,4 +284,9 @@ def get_db_status(db_path: Path) -> DbStatus:
     finally:
         conn.close()
 
-    return DbStatus(schema_version=version, tables=tuple(statuses))
+    try:
+        return DbStatus(schema_version=version, tables=tuple(statuses))
+    except ValueError as exc:
+        msg = f"Inconsistent database status: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
