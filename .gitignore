@@ -2,11 +2,11 @@
 config.toml
 
 # Credentials
-credentials/
+credentials/*
 !credentials/.gitkeep
 
 # Database
-data/
+data/*
 !data/.gitkeep
 
 # Virtual environment
