@@ -257,18 +257,23 @@ def get_db_status(db_path: Path) -> DbStatus:
                 msg = f"Failed to query status for table '{table}': {exc}"
                 logger.error(msg)
                 raise DatabaseError(msg) from exc
-            statuses.append(
-                TableStatus(
-                    name=table,
-                    row_count=row[0],
-                    min_date=row[1],
-                    max_date=row[2],
-                    last_fetched_at=row[3],
+            try:
+                statuses.append(
+                    TableStatus(
+                        name=table,
+                        row_count=row[0],
+                        min_date=row[1],
+                        max_date=row[2],
+                        last_fetched_at=row[3],
+                    )
                 )
-            )
+            except ValueError as exc:
+                msg = f"Invalid data in table '{table}': {exc}"
+                logger.error(msg)
+                raise DatabaseError(msg) from exc
     except DatabaseError:
         raise
-    except (sqlite3.Error, ValueError) as exc:
+    except sqlite3.Error as exc:
         msg = f"Failed to query database status: {exc}"
         logger.error(msg)
         raise DatabaseError(msg) from exc

@@ -50,6 +50,8 @@ def cli(ctx: click.Context, config_path: str, *, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = Path(config_path)
     ctx.obj["verbose"] = verbose
+    # Initial logging so errors during config loading are captured;
+    # _load_config reconfigures with the config-file level via force=True.
     _setup_logging("INFO", verbose=verbose)
 
 
@@ -97,12 +99,12 @@ def db_status(ctx: click.Context) -> None:
 @cli.command()
 def fetch() -> None:
     """Fetch analytics data for all projects."""
-    click.echo("Not implemented yet.")
+    click.echo("Not implemented yet.", err=True)
     raise SystemExit(1)
 
 
 @cli.command()
 def report() -> None:
     """Generate and send analytics reports."""
-    click.echo("Not implemented yet.")
+    click.echo("Not implemented yet.", err=True)
     raise SystemExit(1)
