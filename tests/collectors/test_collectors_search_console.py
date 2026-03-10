@@ -88,18 +88,6 @@ def test_init_builds_credentials_and_service(
     assert collector._service is mock_build.return_value
 
 
-@mock.patch(_PATCH_BUILD)
-@mock.patch(_PATCH_CREDS)
-def test_init_raises_when_build_fails(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
-    mock_creds.return_value = MagicMock()
-    mock_build.side_effect = Exception("discovery failed")
-
-    with pytest.raises(CollectorError, match="Failed to initialize GSC service"):
-        GSCCollector(GoogleConfig(service_account_key=Path("key.json")))
-
-
 # -- fetch --
 
 
@@ -135,6 +123,25 @@ def test_fetch_returns_none_values_when_no_rows(
     service.searchanalytics.return_value.query.return_value.execute.return_value = {
         "rows": [],
     }
+
+    result = collector.fetch(_make_project(), _DATE)
+
+    assert result == {
+        "clicks": None,
+        "impressions": None,
+        "ctr": None,
+        "avg_position": None,
+    }
+
+
+@mock.patch(_PATCH_BUILD)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_returns_none_values_when_rows_key_missing(
+    mock_creds: MagicMock, mock_build: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_build)
+    service = mock_build.return_value
+    service.searchanalytics.return_value.query.return_value.execute.return_value = {}
 
     result = collector.fetch(_make_project(), _DATE)
 
@@ -188,21 +195,6 @@ def test_fetch_wraps_google_auth_error(
     )
 
     with pytest.raises(CollectorError, match="GSC API error"):
-        collector.fetch(_make_project(), _DATE)
-
-
-@mock.patch(_PATCH_BUILD)
-@mock.patch(_PATCH_CREDS)
-def test_fetch_wraps_unexpected_transport_error(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
-    collector = _make_collector(mock_creds, mock_build)
-    service = mock_build.return_value
-    service.searchanalytics.return_value.query.return_value.execute.side_effect = (
-        ConnectionError("network unreachable")
-    )
-
-    with pytest.raises(CollectorError, match="Unexpected GSC error"):
         collector.fetch(_make_project(), _DATE)
 
 
@@ -308,6 +300,18 @@ def test_fetch_top_queries_returns_empty_list_when_no_rows(
     result = collector.fetch_top_queries(_make_project(), _DATE)
 
     assert result == []
+
+
+@mock.patch(_PATCH_BUILD)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_top_queries_raises_when_no_site_url(
+    mock_creds: MagicMock, mock_build: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_build)
+    project = _make_project(gsc_site_url=None)
+
+    with pytest.raises(CollectorError, match="No gsc_site_url configured"):
+        collector.fetch_top_queries(project, _DATE)
 
 
 @mock.patch(_PATCH_BUILD)

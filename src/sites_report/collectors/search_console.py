@@ -18,7 +18,7 @@ _TOP_QUERIES_LIMIT = 20
 # Daily metrics map API field → (DB column, type).
 # "position" maps to "avg_position" because the daily row is an aggregate
 # across all queries, so the value represents the average position.
-_DAILY_METRICS: dict[str, tuple[str, type]] = {
+_DAILY_METRICS: dict[str, tuple[str, type[int] | type[float]]] = {
     "clicks": ("clicks", int),
     "impressions": ("impressions", int),
     "ctr": ("ctr", float),
@@ -27,7 +27,7 @@ _DAILY_METRICS: dict[str, tuple[str, type]] = {
 
 # Top-queries metrics map API field → (DB column, type).
 # "position" keeps its name because each row is a single query.
-_TOP_QUERIES_METRICS: dict[str, tuple[str, type]] = {
+_TOP_QUERIES_METRICS: dict[str, tuple[str, type[int] | type[float]]] = {
     "clicks": ("clicks", int),
     "impressions": ("impressions", int),
     "ctr": ("ctr", float),
@@ -40,13 +40,7 @@ class GSCCollector(Collector):
 
     def __init__(self, google_config: GoogleConfig) -> None:
         credentials = build_google_credentials(google_config, [_GSC_SCOPE])
-        try:
-            self._service = build("searchconsole", "v1", credentials=credentials)
-        except Exception as exc:
-            logger.error("Failed to initialize GSC service: %s", exc)
-            raise CollectorError(
-                f"Failed to initialize GSC service: {exc}"
-            ) from exc
+        self._service = build("searchconsole", "v1", credentials=credentials)
 
     def fetch(
         self, project: ProjectConfig, date: datetime.date
@@ -93,13 +87,6 @@ class GSCCollector(Collector):
             raise CollectorError(
                 f"GSC API error for '{slug}' on {date}: {exc}"
             ) from exc
-        except Exception as exc:
-            logger.error(
-                "Unexpected GSC error for '%s' on %s: %s", slug, date, exc
-            )
-            raise CollectorError(
-                f"Unexpected GSC error for '{slug}' on {date}: {exc}"
-            ) from exc
 
     def _parse_daily(
         self, response: dict
@@ -138,7 +125,7 @@ class GSCCollector(Collector):
 
 
 def _cast_metric(
-    raw: object, db_col: str, typ: type
+    raw: int | float | None, db_col: str, typ: type[int] | type[float]
 ) -> int | float:
     """Cast a GSC metric value to the expected Python type."""
     if raw is None:
