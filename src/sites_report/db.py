@@ -257,6 +257,10 @@ def get_db_status(db_path: Path) -> DbStatus:
                 msg = f"Failed to query status for table '{table}': {exc}"
                 logger.error(msg)
                 raise DatabaseError(msg) from exc
+            if row is None:
+                msg = f"No result from status query for table '{table}'"
+                logger.error(msg)
+                raise DatabaseError(msg)
             try:
                 statuses.append(
                     TableStatus(
@@ -280,4 +284,9 @@ def get_db_status(db_path: Path) -> DbStatus:
     finally:
         conn.close()
 
-    return DbStatus(schema_version=version, tables=tuple(statuses))
+    try:
+        return DbStatus(schema_version=version, tables=tuple(statuses))
+    except ValueError as exc:
+        msg = f"Inconsistent database status: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
