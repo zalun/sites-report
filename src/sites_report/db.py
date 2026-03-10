@@ -124,8 +124,10 @@ class TableStatus:
         if self.row_count == 0 and has_dates:
             msg = "date fields must be None when row_count is 0"
             raise ValueError(msg)
-        if self.row_count > 0 and (self.min_date is None or self.max_date is None):
-            msg = "min_date and max_date must not be None when row_count > 0"
+        if self.row_count > 0 and (
+            self.min_date is None or self.max_date is None or self.last_fetched_at is None
+        ):
+            msg = "min_date, max_date, and last_fetched_at must not be None when row_count > 0"
             raise ValueError(msg)
 
 
