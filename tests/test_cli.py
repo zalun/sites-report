@@ -227,7 +227,7 @@ def test_fetch_calls_ga4_collector_for_configured_project(
         cli, ["--config", str(fetch_config_path), "fetch", "--date", "2025-03-01"]
     )
     assert result.exit_code == 0, result.output
-    assert mock_ga4_cls.called
+    assert mock_ga4_cls.call_count == 1
     assert "successfully" in result.output.lower()
 
 
@@ -240,7 +240,7 @@ def test_fetch_calls_gsc_collector_for_configured_project(
         cli, ["--config", str(fetch_config_path), "fetch", "--date", "2025-03-01"]
     )
     assert result.exit_code == 0, result.output
-    assert mock_gsc_cls.called
+    assert mock_gsc_cls.call_count == 1
 
 
 @mock.patch(_GSC_CLS, side_effect=_gsc_factory)

@@ -318,8 +318,16 @@ def _check_keys(
 ) -> None:
     unknown = data_keys - expected
     if unknown:
-        msg = f"Unknown keys in {table} data for '{project_slug}' on {date}: {unknown}"
-        logger.warning(msg)
+        logger.warning(
+            "Unknown keys in %s data for '%s' on %s: %s",
+            table, project_slug, date, unknown,
+        )
+    missing = expected - data_keys
+    if missing:
+        logger.warning(
+            "Missing keys in %s data for '%s' on %s: %s",
+            table, project_slug, date, missing,
+        )
 
 
 def insert_ga_daily(
