@@ -5,12 +5,14 @@ from __future__ import annotations
 import datetime
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import click
 
 from sites_report.collectors.base import CollectorError
-from sites_report.config import Config, ConfigError, load_config
+from sites_report.config import Config, ConfigError, ProjectConfig, load_config
 from sites_report.db import (
     DatabaseError,
     get_db_status,
@@ -20,6 +22,8 @@ from sites_report.db import (
     insert_gsc_daily,
     insert_gsc_top_queries,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _setup_logging(log_level: str, *, verbose: bool) -> None:
@@ -106,6 +110,109 @@ def db_status(ctx: click.Context) -> None:
         click.echo(f"{t.name:<20} {t.row_count:>6}    {date_range:<27} {last_fetched}")
 
 
+def _init_collector(
+    name: str,
+    factory: Callable[[], Any],
+) -> Any | None:
+    """Try to instantiate a collector; return None on failure."""
+    try:
+        return factory()
+    except ImportError as exc:
+        logger.error("%s dependencies not installed: %s", name, exc)
+        click.echo(f"{name} collector unavailable (missing dependency): {exc}", err=True)
+    except CollectorError as exc:
+        logger.error("Cannot initialize %s collector: %s", name, exc)
+        click.echo(f"{name} collector unavailable: {exc}", err=True)
+    return None
+
+
+def _run_fetch_op(
+    label: str,
+    fetch_fn: Callable[[], Any],
+    insert_fn: Callable[[Any], None],
+    slug: str,
+    date_iso: str,
+    failures: list[str],
+) -> bool:
+    """Run a single fetch + insert operation. Returns True on success."""
+    try:
+        data = fetch_fn()
+        insert_fn(data)
+        logger.info("%s %s %s OK", label, slug, date_iso)
+    except (CollectorError, DatabaseError) as exc:
+        msg = f"{label} {slug} {date_iso}: {exc}"
+        logger.error(msg)
+        failures.append(msg)
+        return False
+    except Exception as exc:
+        msg = f"{label} {slug} {date_iso}: unexpected: {exc}"
+        logger.exception(msg)
+        failures.append(msg)
+        return False
+    return True
+
+
+def _fetch_project(
+    project: ProjectConfig,
+    date: datetime.date,
+    db_path: Path,
+    ga4_collector: Any | None,
+    gsc_collector: Any | None,
+    failures: list[str],
+) -> tuple[int, int]:
+    """Fetch all sources for one project+date. Returns (succeeded, failed)."""
+    ok = 0
+    bad = 0
+    date_iso = date.isoformat()
+
+    if project.ga4_property_id and ga4_collector:
+        if _run_fetch_op(
+            "GA4 daily",
+            lambda: ga4_collector.fetch(project, date),
+            lambda d: insert_ga_daily(db_path, project.slug, date_iso, d),
+            project.slug, date_iso, failures,
+        ):
+            ok += 1
+        else:
+            bad += 1
+
+        if _run_fetch_op(
+            "GA4 top_pages",
+            lambda: ga4_collector.fetch_top_pages(project, date),
+            lambda d: insert_ga_top_pages(db_path, project.slug, date_iso, d),
+            project.slug, date_iso, failures,
+        ):
+            ok += 1
+        else:
+            bad += 1
+
+    if project.gsc_site_url and gsc_collector:
+        if _run_fetch_op(
+            "GSC daily",
+            lambda: gsc_collector.fetch(project, date),
+            lambda d: insert_gsc_daily(db_path, project.slug, date_iso, d),
+            project.slug, date_iso, failures,
+        ):
+            ok += 1
+        else:
+            bad += 1
+
+        if _run_fetch_op(
+            "GSC top_queries",
+            lambda: gsc_collector.fetch_top_queries(project, date),
+            lambda d: insert_gsc_top_queries(db_path, project.slug, date_iso, d),
+            project.slug, date_iso, failures,
+        ):
+            ok += 1
+        else:
+            bad += 1
+
+    if project.vercel_project_id:
+        logger.debug("Vercel collector not implemented, skipping %s", project.slug)
+
+    return ok, bad
+
+
 @cli.command()
 @click.option("--date", "date_str", default=None, help="Date YYYY-MM-DD (default: yesterday)")
 @click.option("--project", "project_slug", default=None, help="Fetch only this project slug")
@@ -117,10 +224,8 @@ def fetch(
     ctx: click.Context, date_str: str | None, project_slug: str | None, range_days: int
 ) -> None:
     """Fetch analytics data for configured projects."""
-    logger = logging.getLogger(__name__)
     cfg = _load_config(ctx)
 
-    # Parse target date
     if date_str is None:
         end_date = datetime.date.today() - datetime.timedelta(days=1)
     else:
@@ -136,7 +241,6 @@ def fetch(
 
     dates = [end_date - datetime.timedelta(days=i) for i in range(range_days - 1, -1, -1)]
 
-    # Filter projects
     projects = cfg.projects
     if project_slug:
         projects = tuple(p for p in projects if p.slug == project_slug)
@@ -144,7 +248,6 @@ def fetch(
             click.echo(f"Unknown project slug: {project_slug!r}", err=True)
             raise SystemExit(1)
 
-    # Ensure DB exists
     try:
         init_db(cfg.db_path)
     except DatabaseError as exc:
@@ -155,96 +258,48 @@ def fetch(
     ga4_collector = None
     gsc_collector = None
     if cfg.google:
-        try:
+        google_cfg = cfg.google
+
+        def _make_ga4():
             from sites_report.collectors.analytics import GA4Collector
+            return GA4Collector(google_cfg)
 
-            ga4_collector = GA4Collector(cfg.google)
-        except ImportError as exc:
-            logger.error("GA4 dependencies not installed: %s", exc)
-            click.echo(f"GA4 collector unavailable (missing dependency): {exc}", err=True)
-        except CollectorError as exc:
-            logger.error("Cannot initialize GA4 collector: %s", exc)
-            click.echo(f"GA4 collector unavailable: {exc}", err=True)
-        try:
+        def _make_gsc():
             from sites_report.collectors.search_console import GSCCollector
+            return GSCCollector(google_cfg)
 
-            gsc_collector = GSCCollector(cfg.google)
-        except ImportError as exc:
-            logger.error("GSC dependencies not installed: %s", exc)
-            click.echo(f"GSC collector unavailable (missing dependency): {exc}", err=True)
-        except CollectorError as exc:
-            logger.error("Cannot initialize GSC collector: %s", exc)
-            click.echo(f"GSC collector unavailable: {exc}", err=True)
+        ga4_collector = _init_collector("GA4", _make_ga4)
+        gsc_collector = _init_collector("GSC", _make_gsc)
+
+    # Warn if configured sources have no working collector
+    needs_ga4 = any(p.ga4_property_id for p in projects)
+    needs_gsc = any(p.gsc_site_url for p in projects)
+    if needs_ga4 and not ga4_collector:
+        click.echo("Warning: projects require GA4 but collector is unavailable.", err=True)
+    if needs_gsc and not gsc_collector:
+        click.echo("Warning: projects require GSC but collector is unavailable.", err=True)
 
     succeeded = 0
     failed = 0
     failures: list[str] = []
 
     for date in dates:
-        date_iso = date.isoformat()
         for project in projects:
-            # GA4 daily
-            if project.ga4_property_id and ga4_collector:
-                try:
-                    daily = ga4_collector.fetch(project, date)
-                    insert_ga_daily(cfg.db_path, project.slug, date_iso, daily)
-                    logger.info("GA4 daily %s %s OK", project.slug, date_iso)
-                    succeeded += 1
-                except (CollectorError, DatabaseError) as exc:
-                    msg = f"GA4 daily {project.slug} {date_iso}: {exc}"
-                    logger.error(msg)
-                    failures.append(msg)
-                    failed += 1
-
-            # GA4 top pages
-            if project.ga4_property_id and ga4_collector:
-                try:
-                    top_pages = ga4_collector.fetch_top_pages(project, date)
-                    insert_ga_top_pages(cfg.db_path, project.slug, date_iso, top_pages)
-                    logger.info("GA4 top_pages %s %s OK", project.slug, date_iso)
-                    succeeded += 1
-                except (CollectorError, DatabaseError) as exc:
-                    msg = f"GA4 top_pages {project.slug} {date_iso}: {exc}"
-                    logger.error(msg)
-                    failures.append(msg)
-                    failed += 1
-
-            # GSC daily
-            if project.gsc_site_url and gsc_collector:
-                try:
-                    daily = gsc_collector.fetch(project, date)
-                    insert_gsc_daily(cfg.db_path, project.slug, date_iso, daily)
-                    logger.info("GSC daily %s %s OK", project.slug, date_iso)
-                    succeeded += 1
-                except (CollectorError, DatabaseError) as exc:
-                    msg = f"GSC daily {project.slug} {date_iso}: {exc}"
-                    logger.error(msg)
-                    failures.append(msg)
-                    failed += 1
-
-            # GSC top queries
-            if project.gsc_site_url and gsc_collector:
-                try:
-                    top_queries = gsc_collector.fetch_top_queries(project, date)
-                    insert_gsc_top_queries(cfg.db_path, project.slug, date_iso, top_queries)
-                    logger.info("GSC top_queries %s %s OK", project.slug, date_iso)
-                    succeeded += 1
-                except (CollectorError, DatabaseError) as exc:
-                    msg = f"GSC top_queries {project.slug} {date_iso}: {exc}"
-                    logger.error(msg)
-                    failures.append(msg)
-                    failed += 1
-
-            # Vercel -- not yet implemented
-            if project.vercel_project_id:
-                logger.debug(
-                    "Vercel collector not implemented, skipping %s", project.slug
-                )
+            ok, bad = _fetch_project(
+                project, date, cfg.db_path,
+                ga4_collector, gsc_collector, failures,
+            )
+            succeeded += ok
+            failed += bad
 
     # Summary
     total = succeeded + failed
     if total == 0:
-        click.echo("No fetch operations were attempted.")
+        msg = "No fetch operations were attempted."
+        if needs_ga4 or needs_gsc:
+            click.echo(msg, err=True)
+            raise SystemExit(1)
+        click.echo(msg)
     else:
         click.echo(f"Fetched {succeeded}/{total} operations successfully.")
     if failures:

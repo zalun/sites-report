@@ -294,11 +294,39 @@ def get_db_status(db_path: Path) -> DbStatus:
 
 # ── Insert helpers ────────────────────────────────────────────────
 
+_GA_DAILY_KEYS = frozenset({
+    "sessions", "users", "new_users", "pageviews",
+    "avg_session_duration", "bounce_rate", "conversions",
+})
+_GSC_DAILY_KEYS = frozenset({
+    "clicks", "impressions", "ctr", "avg_position",
+})
+_GA_TOP_PAGES_KEYS = frozenset({
+    "page_path", "pageviews", "sessions", "avg_time_on_page",
+})
+_GSC_TOP_QUERIES_KEYS = frozenset({
+    "query", "clicks", "impressions", "ctr", "position",
+})
+
+
+def _check_keys(
+    data_keys: set[str],
+    expected: frozenset[str],
+    table: str,
+    project_slug: str,
+    date: str,
+) -> None:
+    unknown = data_keys - expected
+    if unknown:
+        msg = f"Unknown keys in {table} data for '{project_slug}' on {date}: {unknown}"
+        logger.warning(msg)
+
 
 def insert_ga_daily(
     db_path: Path, project_slug: str, date: str, data: dict[str, int | float | str | None]
 ) -> None:
     """Insert or replace a GA4 daily metrics row."""
+    _check_keys(set(data.keys()), _GA_DAILY_KEYS, "ga_daily", project_slug, date)
     conn = _connect(db_path)
     try:
         conn.execute(
@@ -331,6 +359,7 @@ def insert_gsc_daily(
     db_path: Path, project_slug: str, date: str, data: dict[str, int | float | str | None]
 ) -> None:
     """Insert or replace a GSC daily metrics row."""
+    _check_keys(set(data.keys()), _GSC_DAILY_KEYS, "gsc_daily", project_slug, date)
     conn = _connect(db_path)
     try:
         conn.execute(
@@ -362,6 +391,8 @@ def insert_ga_top_pages(
     pages: list[dict[str, int | float | str | None]],
 ) -> None:
     """Insert or replace GA4 top pages rows. Deletes existing rows for the slug+date first."""
+    for p in pages:
+        _check_keys(set(p.keys()), _GA_TOP_PAGES_KEYS, "ga_top_pages", project_slug, date)
     conn = _connect(db_path)
     try:
         # DELETE + INSERT run in a single implicit transaction;
@@ -388,6 +419,7 @@ def insert_ga_top_pages(
         )
         conn.commit()
     except sqlite3.Error as exc:
+        conn.rollback()
         msg = f"Failed to insert ga_top_pages for '{project_slug}' on {date}: {exc}"
         logger.error(msg)
         raise DatabaseError(msg) from exc
@@ -402,6 +434,8 @@ def insert_gsc_top_queries(
     queries: list[dict[str, int | float | str | None]],
 ) -> None:
     """Insert or replace GSC top queries rows. Deletes existing rows for the slug+date first."""
+    for q in queries:
+        _check_keys(set(q.keys()), _GSC_TOP_QUERIES_KEYS, "gsc_top_queries", project_slug, date)
     conn = _connect(db_path)
     try:
         # DELETE + INSERT run in a single implicit transaction;
@@ -429,6 +463,7 @@ def insert_gsc_top_queries(
         )
         conn.commit()
     except sqlite3.Error as exc:
+        conn.rollback()
         msg = f"Failed to insert gsc_top_queries for '{project_slug}' on {date}: {exc}"
         logger.error(msg)
         raise DatabaseError(msg) from exc
