@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from sites_report.config import ConfigError, load_config
+from sites_report.config import Config, ConfigError, load_config
 from sites_report.db import DatabaseError, get_db_status, init_db
 
 logger = logging.getLogger(__name__)
@@ -24,14 +24,17 @@ def _setup_logging(log_level: str, *, verbose: bool) -> None:
     )
 
 
-def _load_config(ctx: click.Context):
+def _load_config(ctx: click.Context) -> Config:
     """Load config from path stored in Click context, exit on error."""
     config_path = ctx.obj["config_path"]
     try:
-        return load_config(config_path)
+        cfg = load_config(config_path)
     except ConfigError as exc:
+        logger.error("Configuration error: %s", exc)
         click.echo(f"Configuration error: {exc}", err=True)
-        raise SystemExit(1) from None
+        raise SystemExit(1) from exc
+    _setup_logging(cfg.log_level, verbose=ctx.obj["verbose"])
+    return cfg
 
 
 @click.group()
@@ -49,6 +52,8 @@ def cli(ctx: click.Context, config_path: str, *, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = Path(config_path)
     ctx.obj["verbose"] = verbose
+    # Set up basic logging before config is loaded so errors are captured
+    _setup_logging("INFO", verbose=verbose)
 
 
 @cli.command()
@@ -56,12 +61,12 @@ def cli(ctx: click.Context, config_path: str, *, verbose: bool) -> None:
 def init(ctx: click.Context) -> None:
     """Create database and verify configuration."""
     cfg = _load_config(ctx)
-    _setup_logging(cfg.log_level, verbose=ctx.obj["verbose"])
     try:
         init_db(cfg.db_path)
     except DatabaseError as exc:
+        logger.error("Database error: %s", exc)
         click.echo(f"Database error: {exc}", err=True)
-        raise SystemExit(1) from None
+        raise SystemExit(1) from exc
     click.echo(f"Database initialized: {cfg.db_path}")
 
 
@@ -70,12 +75,12 @@ def init(ctx: click.Context) -> None:
 def db_status(ctx: click.Context) -> None:
     """Show database health: row counts, date ranges, last fetch times."""
     cfg = _load_config(ctx)
-    _setup_logging(cfg.log_level, verbose=ctx.obj["verbose"])
     try:
         status = get_db_status(cfg.db_path)
     except DatabaseError as exc:
+        logger.error("Database error: %s", exc)
         click.echo(f"Database error: {exc}", err=True)
-        raise SystemExit(1) from None
+        raise SystemExit(1) from exc
 
     click.echo(f"Schema version: {status.schema_version}")
     click.echo(f"Database: {cfg.db_path}")

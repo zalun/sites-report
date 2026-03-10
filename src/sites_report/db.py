@@ -148,7 +148,12 @@ class DbStatus:
 
 def _connect(db_path: Path) -> sqlite3.Connection:
     """Open a connection with WAL mode and foreign keys enabled."""
-    conn = sqlite3.connect(db_path)
+    try:
+        conn = sqlite3.connect(db_path)
+    except sqlite3.Error as exc:
+        msg = f"Cannot open database '{db_path}': {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
     try:
         result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
         if result is None or result[0].lower() != "wal":
