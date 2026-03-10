@@ -1,7 +1,5 @@
 """Abstract base class for data source collectors."""
 
-from __future__ import annotations
-
 import datetime
 from abc import ABC, abstractmethod
 
@@ -16,7 +14,9 @@ class Collector(ABC):
     """Interface for fetching daily analytics data from a source."""
 
     @abstractmethod
-    def fetch(self, project: ProjectConfig, date: datetime.date) -> dict:
+    def fetch(
+        self, project: ProjectConfig, date: datetime.date
+    ) -> dict[str, int | float | str | None]:
         """Fetch analytics data for a project on a given date.
 
         Returns a dict of column names to values matching the source's
