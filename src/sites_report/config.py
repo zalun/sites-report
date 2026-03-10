@@ -205,15 +205,17 @@ def _parse_project(data: dict, index: int) -> ProjectConfig:
         if not data[key] or not data[key].strip():
             msg = f"Field '{key}' in projects[{index}] must not be empty"
             raise ConfigError(msg)
+    name = data["name"].strip()
+    slug = data["slug"].strip()
     ga4 = data.get("ga4_property_id")
     gsc = data.get("gsc_site_url")
     vercel = data.get("vercel_project_id")
     if ga4 is None and gsc is None and vercel is None:
-        msg = f"Project '{data['slug']}' has no data sources configured"
+        msg = f"Project '{slug}' has no data sources configured"
         raise ConfigError(msg)
     return ProjectConfig(
-        name=data["name"],
-        slug=data["slug"],
+        name=name,
+        slug=slug,
         ga4_property_id=ga4,
         gsc_site_url=gsc,
         vercel_project_id=vercel,
