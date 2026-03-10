@@ -153,7 +153,7 @@ target-version = "py314"
 line-length = 99
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "SIM", "RUF", "S110"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["sites_report"]
