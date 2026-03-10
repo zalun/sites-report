@@ -7,6 +7,7 @@ from sites_report.config import (
     ConfigError,
     EmailConfig,
     GoogleConfig,
+    LogLevel,
     ProjectConfig,
     Schedule,
     SubscriptionConfig,
@@ -31,9 +32,13 @@ smtp_user = "user@example.com"
 smtp_password_env = "SMTP_PASSWORD"
 from_address = "reports@example.com"
 
+[google]
+service_account_key = "credentials/sa.json"
+
 [[projects]]
 name = "My Site"
 slug = "my-site"
+gsc_site_url = "https://example.com"
 
 [[subscriptions]]
 recipient = "admin@example.com"
@@ -86,7 +91,7 @@ schedule = "daily"
 
     assert isinstance(cfg, Config)
     assert cfg.db_path == Path("data/test.db")
-    assert cfg.log_level == "DEBUG"
+    assert cfg.log_level == LogLevel.DEBUG
     assert isinstance(cfg.email, EmailConfig)
     assert cfg.email.smtp_password == "secret"
     assert isinstance(cfg.google, GoogleConfig)
@@ -108,13 +113,20 @@ def test_load_config_without_vercel_section(tmp_path, monkeypatch):
     cfg = load_config(path)
 
     assert cfg.vercel is None
-    assert cfg.google is None
+    assert cfg.google is not None
 
 
 def test_load_config_without_google_section(tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     monkeypatch.setenv("VERCEL_TOKEN", "tok_123")
-    toml = _minimal_toml("""\
+    toml = """\
+[email]
+smtp_host = "smtp.example.com"
+smtp_port = 587
+smtp_user = "user@example.com"
+smtp_password_env = "SMTP_PASSWORD"
+from_address = "reports@example.com"
+
 [vercel]
 api_token_env = "VERCEL_TOKEN"
 
@@ -122,9 +134,12 @@ api_token_env = "VERCEL_TOKEN"
 name = "Vercel Only"
 slug = "vercel-only"
 vercel_project_id = "prj_xyz"
-""")
-    # Need to also add the vercel-only slug to subscription or use separate subscription
-    # The minimal_toml already has a subscription for "my-site", so this is fine
+
+[[subscriptions]]
+recipient = "admin@example.com"
+projects = ["vercel-only"]
+schedule = "daily"
+"""
     path = _write_toml_str(tmp_path, toml)
     cfg = load_config(path)
 
@@ -139,7 +154,7 @@ def test_load_config_defaults_general_fields(tmp_path, monkeypatch):
     cfg = load_config(path)
 
     assert cfg.db_path == Path("data/sites-report.db")
-    assert cfg.log_level == "INFO"
+    assert cfg.log_level == LogLevel.INFO
 
 
 def test_load_config_resolves_env_vars(tmp_path, monkeypatch):
@@ -179,6 +194,7 @@ def test_load_config_raises_on_missing_email_section(tmp_path):
 [[projects]]
 name = "X"
 slug = "x"
+gsc_site_url = "https://example.com"
 
 [[subscriptions]]
 recipient = "a@b.com"
@@ -212,6 +228,7 @@ def test_load_config_raises_on_duplicate_project_slugs(tmp_path):
 [[projects]]
 name = "Duplicate"
 slug = "my-site"
+gsc_site_url = "https://example.com"
 """
     path = _write_toml_str(tmp_path, toml)
     with pytest.raises(ConfigError, match="Duplicate project slug"):
@@ -249,6 +266,7 @@ from_address = "reports@example.com"
 [[projects]]
 name = "X"
 slug = "x"
+gsc_site_url = "https://example.com"
 """
     path = _write_toml_str(tmp_path, toml)
     with pytest.raises(ConfigError, match="At least one \\[\\[subscriptions\\]\\]"):
@@ -345,3 +363,42 @@ def test_load_config_raises_on_unreadable_file(tmp_path):
     path.mkdir()  # directory, not a file
     with pytest.raises(ConfigError, match="Cannot read config file"):
         load_config(path)
+
+
+def test_load_config_raises_on_missing_google_service_account_key(tmp_path):
+    toml = _minimal_toml().replace(
+        'service_account_key = "credentials/sa.json"', ""
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="Missing required google field"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_missing_vercel_api_token_env(tmp_path):
+    toml = _minimal_toml() + "\n[vercel]\n"
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="Missing required vercel field"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_missing_project_slug(tmp_path):
+    toml = _minimal_toml().replace('slug = "my-site"', "")
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="Missing required field 'slug'"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_project_with_no_data_sources(tmp_path):
+    toml = _minimal_toml().replace(
+        'gsc_site_url = "https://example.com"', ""
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="has no data sources configured"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_empty_project_slug(tmp_path):
+    toml = _minimal_toml().replace('slug = "my-site"', 'slug = ""')
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match=r"'slug'.*must not be empty"):
+        load_config(path, resolve_env=False)

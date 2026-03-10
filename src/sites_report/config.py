@@ -15,6 +15,14 @@ class Schedule(StrEnum):
     MONTHLY = "monthly"
 
 
+class LogLevel(StrEnum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
 class ConfigError(Exception):
     """Raised when configuration is invalid or cannot be loaded."""
 
@@ -57,15 +65,12 @@ class SubscriptionConfig:
 @dataclass(frozen=True, slots=True)
 class Config:
     db_path: Path
-    log_level: str
+    log_level: LogLevel
     email: EmailConfig
     google: GoogleConfig | None
     vercel: VercelConfig | None
     projects: tuple[ProjectConfig, ...]
     subscriptions: tuple[SubscriptionConfig, ...]
-
-
-_VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
 def load_config(path: Path, *, resolve_env: bool = True) -> Config:
@@ -87,11 +92,13 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
 
     general = data.get("general", {})
     db_path = Path(general.get("db_path", "data/sites-report.db"))
-    log_level = general.get("log_level", "INFO").upper()
-    if log_level not in _VALID_LOG_LEVELS:
-        valid = ", ".join(sorted(_VALID_LOG_LEVELS))
-        msg = f"Invalid log_level '{log_level}', must be one of: {valid}"
-        raise ConfigError(msg)
+    raw_log_level = general.get("log_level", "INFO").upper()
+    try:
+        log_level = LogLevel(raw_log_level)
+    except ValueError:
+        valid = ", ".join(lv.value for lv in LogLevel)
+        msg = f"Invalid log_level '{raw_log_level}', must be one of: {valid}"
+        raise ConfigError(msg) from None
 
     if "email" not in data:
         msg = "Missing required [email] section"
@@ -191,17 +198,26 @@ def _parse_vercel(data: dict, *, resolve_env: bool) -> VercelConfig:
 
 
 def _parse_project(data: dict, index: int) -> ProjectConfig:
-    try:
-        return ProjectConfig(
-            name=data["name"],
-            slug=data["slug"],
-            ga4_property_id=data.get("ga4_property_id"),
-            gsc_site_url=data.get("gsc_site_url"),
-            vercel_project_id=data.get("vercel_project_id"),
-        )
-    except KeyError as exc:
-        msg = f"Missing required field {exc} in projects[{index}]"
-        raise ConfigError(msg) from None
+    for key in ("name", "slug"):
+        if key not in data:
+            msg = f"Missing required field '{key}' in projects[{index}]"
+            raise ConfigError(msg)
+        if not data[key] or not data[key].strip():
+            msg = f"Field '{key}' in projects[{index}] must not be empty"
+            raise ConfigError(msg)
+    ga4 = data.get("ga4_property_id")
+    gsc = data.get("gsc_site_url")
+    vercel = data.get("vercel_project_id")
+    if ga4 is None and gsc is None and vercel is None:
+        msg = f"Project '{data['slug']}' has no data sources configured"
+        raise ConfigError(msg)
+    return ProjectConfig(
+        name=data["name"],
+        slug=data["slug"],
+        ga4_property_id=ga4,
+        gsc_site_url=gsc,
+        vercel_project_id=vercel,
+    )
 
 
 def _parse_subscription(data: dict, index: int, valid_slugs: frozenset[str]) -> SubscriptionConfig:
