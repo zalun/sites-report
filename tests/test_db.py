@@ -233,6 +233,30 @@ def test_init_db_raises_on_schema_version_mismatch(tmp_path):
         init_db(db_path)
 
 
+def test_get_db_status_raises_on_schema_version_mismatch(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("INSERT INTO schema_version (version) VALUES (?)", (999,))
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(DatabaseError, match="schema version mismatch"):
+        get_db_status(db_path)
+
+
+def test_init_db_enables_wal_mode(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+
+    conn = sqlite3.connect(db_path)
+    mode = conn.execute("PRAGMA journal_mode").fetchone()
+    conn.close()
+
+    assert mode[0] == "wal"
+
+
 # ── Dataclass validation ──────────────────────────────────────────
 
 
@@ -240,6 +264,14 @@ def test_table_status_rejects_negative_row_count():
     with pytest.raises(ValueError, match="row_count must be non-negative"):
         TableStatus(
             name="ga_daily", row_count=-1,
+            min_date=None, max_date=None, last_fetched_at=None,
+        )
+
+
+def test_table_status_rejects_empty_name():
+    with pytest.raises(ValueError, match="name must not be empty"):
+        TableStatus(
+            name="", row_count=0,
             min_date=None, max_date=None, last_fetched_at=None,
         )
 
@@ -253,6 +285,13 @@ def test_db_status_rejects_invalid_schema_version():
         DbStatus(schema_version=0, tables=tables)
 
 
-def test_db_status_rejects_wrong_table_count():
-    with pytest.raises(ValueError, match="expected 5 tables"):
-        DbStatus(schema_version=1, tables=())
+def test_db_status_rejects_wrong_table_names():
+    tables = tuple(
+        TableStatus(
+            name="wrong", row_count=0,
+            min_date=None, max_date=None, last_fetched_at=None,
+        )
+        for _ in DATA_TABLES
+    )
+    with pytest.raises(ValueError, match="expected tables"):
+        DbStatus(schema_version=1, tables=tables)

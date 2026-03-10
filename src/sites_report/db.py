@@ -114,6 +114,9 @@ class TableStatus:
     last_fetched_at: str | None
 
     def __post_init__(self) -> None:
+        if not self.name:
+            msg = "name must not be empty"
+            raise ValueError(msg)
         if self.row_count < 0:
             msg = "row_count must be non-negative"
             raise ValueError(msg)
@@ -128,8 +131,9 @@ class DbStatus:
         if self.schema_version < 1:
             msg = "schema_version must be >= 1"
             raise ValueError(msg)
-        if len(self.tables) != len(DATA_TABLES):
-            msg = f"expected {len(DATA_TABLES)} tables, got {len(self.tables)}"
+        actual_names = tuple(t.name for t in self.tables)
+        if actual_names != DATA_TABLES:
+            msg = f"expected tables {DATA_TABLES}, got {actual_names}"
             raise ValueError(msg)
 
 
@@ -143,6 +147,10 @@ def _connect(db_path: Path) -> sqlite3.Connection:
             msg = f"Failed to enable WAL journal mode for '{db_path}', got: {actual}"
             raise DatabaseError(msg)
         conn.execute("PRAGMA foreign_keys=ON")
+        fk_result = conn.execute("PRAGMA foreign_keys").fetchone()
+        if fk_result is None or fk_result[0] != 1:
+            msg = f"Failed to enable foreign keys for '{db_path}'"
+            raise DatabaseError(msg)
     except DatabaseError:
         conn.close()
         raise
@@ -162,12 +170,7 @@ def init_db(db_path: Path) -> None:
         logger.error(msg)
         raise DatabaseError(msg) from exc
 
-    try:
-        conn = _connect(db_path)
-    except sqlite3.Error as exc:
-        msg = f"Cannot open database '{db_path}': {exc}"
-        logger.error(msg)
-        raise DatabaseError(msg) from exc
+    conn = _connect(db_path)
 
     try:
         conn.executescript(_SCHEMA_SQL)
@@ -178,7 +181,11 @@ def init_db(db_path: Path) -> None:
         conn.commit()
 
         current = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        if current and current[0] != SCHEMA_VERSION:
+        if current is None or current[0] is None:
+            msg = "Database schema version table is empty — may be corrupt"
+            logger.error(msg)
+            raise DatabaseError(msg)
+        if current[0] != SCHEMA_VERSION:
             msg = (
                 f"Database schema version mismatch: expected {SCHEMA_VERSION}, "
                 f"found {current[0]}. Migration may be required."
@@ -199,12 +206,7 @@ def get_db_status(db_path: Path) -> DbStatus:
         msg = f"Database file not found: {db_path}"
         raise DatabaseError(msg)
 
-    try:
-        conn = _connect(db_path)
-    except sqlite3.Error as exc:
-        msg = f"Cannot open database '{db_path}': {exc}"
-        logger.error(msg)
-        raise DatabaseError(msg) from exc
+    conn = _connect(db_path)
 
     try:
         row = conn.execute(
@@ -215,6 +217,13 @@ def get_db_status(db_path: Path) -> DbStatus:
             logger.error(msg)
             raise DatabaseError(msg)
         version = row[0]
+        if version != SCHEMA_VERSION:
+            msg = (
+                f"Database schema version mismatch: expected {SCHEMA_VERSION}, "
+                f"found {version}. Migration may be required."
+            )
+            logger.error(msg)
+            raise DatabaseError(msg)
 
         statuses: list[TableStatus] = []
         for table in DATA_TABLES:
