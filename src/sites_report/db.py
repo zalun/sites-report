@@ -120,6 +120,13 @@ class TableStatus:
         if self.row_count < 0:
             msg = "row_count must be non-negative"
             raise ValueError(msg)
+        has_dates = self.min_date is not None or self.max_date is not None
+        if self.row_count == 0 and has_dates:
+            msg = "date fields must be None when row_count is 0"
+            raise ValueError(msg)
+        if self.row_count > 0 and (self.min_date is None or self.max_date is None):
+            msg = "min_date and max_date must not be None when row_count > 0"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,11 +152,13 @@ def _connect(db_path: Path) -> sqlite3.Connection:
         if result is None or result[0].lower() != "wal":
             actual = result[0] if result else "unknown"
             msg = f"Failed to enable WAL journal mode for '{db_path}', got: {actual}"
+            logger.error(msg)
             raise DatabaseError(msg)
         conn.execute("PRAGMA foreign_keys=ON")
         fk_result = conn.execute("PRAGMA foreign_keys").fetchone()
         if fk_result is None or fk_result[0] != 1:
             msg = f"Failed to enable foreign keys for '{db_path}'"
+            logger.error(msg)
             raise DatabaseError(msg)
     except DatabaseError:
         conn.close()
@@ -157,6 +166,7 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     except sqlite3.Error as exc:
         conn.close()
         msg = f"Failed to configure database pragmas for '{db_path}': {exc}"
+        logger.error(msg)
         raise DatabaseError(msg) from exc
     return conn
 
@@ -204,6 +214,7 @@ def get_db_status(db_path: Path) -> DbStatus:
     """Return row counts, date ranges, last fetch times for all data tables."""
     if not db_path.exists():
         msg = f"Database file not found: {db_path}"
+        logger.error(msg)
         raise DatabaseError(msg)
 
     conn = _connect(db_path)
