@@ -11,16 +11,15 @@ import click
 from sites_report.config import Config, ConfigError, load_config
 from sites_report.db import DatabaseError, get_db_status, init_db
 
-logger = logging.getLogger(__name__)
-
 
 def _setup_logging(log_level: str, *, verbose: bool) -> None:
-    """Configure logging to stderr."""
+    """Configure logging to stderr. Safe to call multiple times."""
     level = "DEBUG" if verbose else log_level
     logging.basicConfig(
         level=level,
         stream=sys.stderr,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
     )
 
 
@@ -30,7 +29,6 @@ def _load_config(ctx: click.Context) -> Config:
     try:
         cfg = load_config(config_path)
     except ConfigError as exc:
-        logger.error("Configuration error: %s", exc)
         click.echo(f"Configuration error: {exc}", err=True)
         raise SystemExit(1) from exc
     _setup_logging(cfg.log_level, verbose=ctx.obj["verbose"])
@@ -52,7 +50,6 @@ def cli(ctx: click.Context, config_path: str, *, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = Path(config_path)
     ctx.obj["verbose"] = verbose
-    # Set up basic logging before config is loaded so errors are captured
     _setup_logging("INFO", verbose=verbose)
 
 
@@ -64,7 +61,6 @@ def init(ctx: click.Context) -> None:
     try:
         init_db(cfg.db_path)
     except DatabaseError as exc:
-        logger.error("Database error: %s", exc)
         click.echo(f"Database error: {exc}", err=True)
         raise SystemExit(1) from exc
     click.echo(f"Database initialized: {cfg.db_path}")
@@ -78,7 +74,6 @@ def db_status(ctx: click.Context) -> None:
     try:
         status = get_db_status(cfg.db_path)
     except DatabaseError as exc:
-        logger.error("Database error: %s", exc)
         click.echo(f"Database error: {exc}", err=True)
         raise SystemExit(1) from exc
 

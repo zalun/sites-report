@@ -51,21 +51,16 @@ def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return cfg
 
 
-@pytest.fixture
-def db_path(tmp_path: Path) -> Path:
-    return tmp_path / "data" / "sites-report.db"
-
-
 # --- init command ---
 
 
 def test_init_creates_database(
-    runner: CliRunner, config_path: Path, db_path: Path
+    runner: CliRunner, config_path: Path, tmp_path: Path
 ) -> None:
     result = runner.invoke(cli, ["--config", str(config_path), "init"])
     assert result.exit_code == 0, result.output
     assert "initialized" in result.output.lower()
-    assert db_path.exists()
+    assert (tmp_path / "data" / "sites-report.db").exists()
 
 
 def test_init_is_idempotent(runner: CliRunner, config_path: Path) -> None:

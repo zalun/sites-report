@@ -120,9 +120,13 @@ class TableStatus:
         if self.row_count < 0:
             msg = "row_count must be non-negative"
             raise ValueError(msg)
-        has_dates = self.min_date is not None or self.max_date is not None
+        has_dates = (
+            self.min_date is not None
+            or self.max_date is not None
+            or self.last_fetched_at is not None
+        )
         if self.row_count == 0 and has_dates:
-            msg = "date fields must be None when row_count is 0"
+            msg = "date fields and last_fetched_at must be None when row_count is 0"
             raise ValueError(msg)
         if self.row_count > 0 and (
             self.min_date is None or self.max_date is None or self.last_fetched_at is None
@@ -264,7 +268,7 @@ def get_db_status(db_path: Path) -> DbStatus:
             )
     except DatabaseError:
         raise
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, ValueError) as exc:
         msg = f"Failed to query database status: {exc}"
         logger.error(msg)
         raise DatabaseError(msg) from exc
