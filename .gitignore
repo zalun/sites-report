@@ -1,0 +1,23 @@
+# Runtime config (contains secrets references)
+config.toml
+
+# Credentials
+credentials/
+!credentials/.gitkeep
+
+# Database
+data/
+!data/.gitkeep
+
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

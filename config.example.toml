@@ -1,0 +1,33 @@
+[general]
+db_path = "data/sites-report.db"
+log_level = "INFO"
+
+[email]
+smtp_host = "smtp.gmail.com"
+smtp_port = 587
+smtp_user = "user@gmail.com"
+smtp_password_env = "SITES_REPORT_SMTP_PASSWORD"   # Read from environment variable
+from_address = "user@gmail.com"
+
+[google]
+service_account_key = "credentials/service-account.json"
+
+[vercel]
+api_token_env = "SITES_REPORT_VERCEL_TOKEN"    # Read from environment variable
+
+# --- Projects: define data sources ---
+# All fields are optional — only configure the sources available for each project.
+
+[[projects]]
+name = "My Website"
+slug = "my-website"
+ga4_property_id = "properties/123456789"
+gsc_site_url = "https://example.com"
+vercel_project_id = "prj_abc123"
+
+# --- Subscriptions: who gets what, and how often ---
+
+[[subscriptions]]
+recipient = "you@example.com"
+projects = ["my-website"]
+schedule = "daily"
