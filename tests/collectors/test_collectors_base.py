@@ -86,3 +86,14 @@ def test_build_google_credentials_raises_on_key_error(mock_creds_cls, tmp_path):
 
     with pytest.raises(CollectorError, match="Invalid service account key"):
         build_google_credentials(config, ["scope"])
+
+
+@mock.patch("google.oauth2.service_account.Credentials")
+def test_build_google_credentials_raises_on_os_error(mock_creds_cls, tmp_path):
+    key_file = tmp_path / "unreadable.json"
+    key_file.write_text("{}")
+    config = GoogleConfig(service_account_key=key_file)
+    mock_creds_cls.from_service_account_file.side_effect = OSError("Permission denied")
+
+    with pytest.raises(CollectorError, match="Invalid service account key"):
+        build_google_credentials(config, ["scope"])

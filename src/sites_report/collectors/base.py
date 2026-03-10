@@ -36,7 +36,7 @@ def build_google_credentials(
     from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 
     key_path = google_config.service_account_key
-    if not key_path.exists():
+    if not key_path.is_file():
         raise CollectorError(f"Service account key not found: {key_path}")
     try:
         return ServiceAccountCredentials.from_service_account_file(
