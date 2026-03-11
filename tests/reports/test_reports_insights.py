@@ -105,6 +105,7 @@ def test_generate_highlights_timeout(mock_run, caplog):
         result = generate_highlights("My Site", Schedule.DAILY, _ga4_metrics(), None, [], [])
     assert result is None
     assert "timed out" in caplog.text
+    assert "My Site" in caplog.text
 
 
 @mock.patch(f"{_P}.subprocess.run")
@@ -114,6 +115,7 @@ def test_generate_highlights_claude_not_found(mock_run, caplog):
         result = generate_highlights("My Site", Schedule.DAILY, _ga4_metrics(), None, [], [])
     assert result is None
     assert "OS error" in caplog.text
+    assert "My Site" in caplog.text
 
 
 @mock.patch(f"{_P}.subprocess.run")
@@ -132,6 +134,17 @@ def test_generate_highlights_subprocess_error(mock_run, caplog):
         result = generate_highlights("My Site", Schedule.DAILY, _ga4_metrics(), None, [], [])
     assert result is None
     assert "subprocess error" in caplog.text
+    assert "My Site" in caplog.text
+
+
+@mock.patch(f"{_P}.subprocess.run")
+def test_generate_highlights_unicode_decode_error(mock_run, caplog):
+    mock_run.side_effect = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte")
+    with caplog.at_level(logging.WARNING):
+        result = generate_highlights("My Site", Schedule.DAILY, _ga4_metrics(), None, [], [])
+    assert result is None
+    assert "undecodable output" in caplog.text
+    assert "My Site" in caplog.text
 
 
 @mock.patch(f"{_P}.subprocess.run")
@@ -146,6 +159,7 @@ def test_generate_highlights_empty_output(mock_run, caplog):
         result = generate_highlights("My Site", Schedule.DAILY, _ga4_metrics(), None, [], [])
     assert result is None
     assert "empty output" in caplog.text
+    assert "My Site" in caplog.text
 
 
 @mock.patch(f"{_P}.subprocess.run")
@@ -161,6 +175,7 @@ def test_generate_highlights_nonzero_returncode(mock_run, caplog):
     assert result is None
     assert "exited with code 1" in caplog.text
     assert "model not found" in caplog.text
+    assert "My Site" in caplog.text
 
 
 @mock.patch(f"{_P}.subprocess.run")

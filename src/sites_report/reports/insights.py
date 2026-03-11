@@ -47,44 +47,65 @@ def generate_highlights(
             check=False,
         )
     except OSError:
-        logger.warning("claude CLI OS error — skipping AI highlights", exc_info=True)
+        logger.warning(
+            "claude CLI OS error for '%s' — skipping AI highlights",
+            project_name,
+            exc_info=True,
+        )
         return None
     except subprocess.TimeoutExpired:
         logger.warning(
-            "claude CLI timed out after %ds — skipping AI highlights", _TIMEOUT_SECONDS
+            "claude CLI timed out after %ds for '%s' — skipping AI highlights",
+            _TIMEOUT_SECONDS,
+            project_name,
         )
         return None
     except subprocess.SubprocessError as exc:
         logger.warning(
-            "claude CLI subprocess error (%s) — skipping AI highlights",
+            "claude CLI subprocess error (%s) for '%s' — skipping AI highlights",
             type(exc).__name__,
+            project_name,
+            exc_info=True,
+        )
+        return None
+    except UnicodeDecodeError:
+        logger.warning(
+            "claude CLI produced undecodable output for '%s' — skipping AI highlights",
+            project_name,
             exc_info=True,
         )
         return None
 
     if result.returncode != 0:
         logger.warning(
-            "claude CLI exited with code %d — skipping AI highlights\nstderr: %s",
+            "claude CLI exited with code %d for '%s' — skipping AI highlights\nstderr: %s",
             result.returncode,
+            project_name,
             _truncate_stderr(result.stderr),
         )
         return None
 
     output = result.stdout.strip()
     if not output:
-        logger.warning("claude CLI returned empty output — skipping AI highlights")
+        logger.warning(
+            "claude CLI returned empty output for '%s' — skipping AI highlights",
+            project_name,
+        )
         return None
     return output
 
 
-def _truncate_stderr(stderr: str, limit: int = 500) -> str:
+_STDERR_LIMIT = 500
+
+
+def _truncate_stderr(stderr: str) -> str:
     """Truncate stderr for logging, indicating when content was cut."""
     text = stderr.strip()
     if not text:
         return "(empty)"
-    if len(text) <= limit:
+    if len(text) <= _STDERR_LIMIT:
         return text
-    return f"{text[:limit]} ... ({len(text) - limit} more chars)"
+    return f"{text[:_STDERR_LIMIT]} ... ({len(text) - _STDERR_LIMIT} more chars)"
 
 
 def _has_meaningful_data(
