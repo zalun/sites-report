@@ -138,6 +138,38 @@ def test_fetch_returns_none_values_when_no_rows(
 
 @mock.patch(_PATCH_CLIENT)
 @mock.patch(_PATCH_CREDS)
+def test_require_property_id_prepends_prefix_when_missing(
+    mock_creds: MagicMock, mock_client_cls: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_client_cls)
+    project = _make_project(ga4_property_id="491072921")
+    assert collector._require_property_id(project) == "properties/491072921"
+
+
+@mock.patch(_PATCH_CLIENT)
+@mock.patch(_PATCH_CREDS)
+def test_require_property_id_warns_on_non_numeric_bare_id(
+    mock_creds: MagicMock, mock_client_cls: MagicMock, caplog: pytest.LogCaptureFixture
+) -> None:
+    collector = _make_collector(mock_creds, mock_client_cls)
+    project = _make_project(ga4_property_id="property/123456")
+    result = collector._require_property_id(project)
+    assert result == "properties/property/123456"
+    assert "not a bare numeric ID" in caplog.text
+
+
+@mock.patch(_PATCH_CLIENT)
+@mock.patch(_PATCH_CREDS)
+def test_require_property_id_keeps_existing_prefix(
+    mock_creds: MagicMock, mock_client_cls: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_client_cls)
+    project = _make_project(ga4_property_id="properties/123456")
+    assert collector._require_property_id(project) == "properties/123456"
+
+
+@mock.patch(_PATCH_CLIENT)
+@mock.patch(_PATCH_CREDS)
 def test_fetch_raises_when_no_property_id(
     mock_creds: MagicMock, mock_client_cls: MagicMock
 ) -> None:

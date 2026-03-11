@@ -85,7 +85,21 @@ class GA4Collector(Collector):
         if not project.ga4_property_id:
             logger.error("No ga4_property_id for project '%s'", project.slug)
             raise CollectorError(f"No ga4_property_id configured for project '{project.slug}'")
-        return project.ga4_property_id
+        pid = project.ga4_property_id
+        if not pid.startswith("properties/"):
+            if not pid.isdigit():
+                logger.warning(
+                    "ga4_property_id '%s' for project '%s' is not a bare numeric ID"
+                    " and does not start with 'properties/'",
+                    pid, project.slug,
+                )
+            else:
+                logger.debug(
+                    "Prepending 'properties/' prefix to ga4_property_id '%s' for project '%s'",
+                    pid, project.slug,
+                )
+            pid = f"properties/{pid}"
+        return pid
 
     def _run_report(
         self, request: RunReportRequest, slug: str, date: datetime.date
