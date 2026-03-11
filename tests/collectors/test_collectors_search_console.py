@@ -67,9 +67,7 @@ def _make_query_row(
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_init_builds_credentials_and_service(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
+def test_init_builds_credentials_and_service(mock_creds: MagicMock, mock_build: MagicMock) -> None:
     google_config = GoogleConfig(service_account_key=Path("key.json"))
     fake_creds = MagicMock()
     mock_creds.return_value = fake_creds
@@ -82,9 +80,7 @@ def test_init_builds_credentials_and_service(
         ["https://www.googleapis.com/auth/webmasters.readonly"],
     )
     assert mock_build.call_count == 1
-    assert mock_build.call_args == mock.call(
-        "searchconsole", "v1", credentials=fake_creds
-    )
+    assert mock_build.call_args == mock.call("searchconsole", "v1", credentials=fake_creds)
     assert collector._service is mock_build.return_value
 
 
@@ -93,9 +89,7 @@ def test_init_builds_credentials_and_service(
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_returns_daily_metrics(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
+def test_fetch_returns_daily_metrics(mock_creds: MagicMock, mock_build: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_build)
     service = mock_build.return_value
     service.searchanalytics.return_value.query.return_value.execute.return_value = {
@@ -155,9 +149,7 @@ def test_fetch_returns_none_values_when_rows_key_missing(
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_raises_when_no_site_url(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
+def test_fetch_raises_when_no_site_url(mock_creds: MagicMock, mock_build: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_build)
     project = _make_project(gsc_site_url=None)
 
@@ -167,16 +159,14 @@ def test_fetch_raises_when_no_site_url(
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_wraps_http_error(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
+def test_fetch_wraps_http_error(mock_creds: MagicMock, mock_build: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_build)
     service = mock_build.return_value
     resp = MagicMock()
     resp.status = 403
     resp.reason = "Forbidden"
-    service.searchanalytics.return_value.query.return_value.execute.side_effect = (
-        HttpError(resp=resp, content=b"quota exceeded")
+    service.searchanalytics.return_value.query.return_value.execute.side_effect = HttpError(
+        resp=resp, content=b"quota exceeded"
     )
 
     with pytest.raises(CollectorError, match="GSC API error"):
@@ -185,13 +175,11 @@ def test_fetch_wraps_http_error(
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_wraps_google_auth_error(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
+def test_fetch_wraps_google_auth_error(mock_creds: MagicMock, mock_build: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_build)
     service = mock_build.return_value
-    service.searchanalytics.return_value.query.return_value.execute.side_effect = (
-        GoogleAuthError("token expired")
+    service.searchanalytics.return_value.query.return_value.execute.side_effect = GoogleAuthError(
+        "token expired"
     )
 
     with pytest.raises(CollectorError, match="GSC API error"):
@@ -200,9 +188,7 @@ def test_fetch_wraps_google_auth_error(
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_raises_on_missing_metric_key(
-    mock_creds: MagicMock, mock_build: MagicMock
-) -> None:
+def test_fetch_raises_on_missing_metric_key(mock_creds: MagicMock, mock_build: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_build)
     service = mock_build.return_value
     # Row missing 'position' key
@@ -322,9 +308,7 @@ def test_fetch_top_queries_raises_on_missing_query_dimension(
     collector = _make_collector(mock_creds, mock_build)
     service = mock_build.return_value
     service.searchanalytics.return_value.query.return_value.execute.return_value = {
-        "rows": [
-            {"clicks": 10, "impressions": 200, "ctr": 0.05, "position": 3.0}
-        ],
+        "rows": [{"clicks": 10, "impressions": 200, "ctr": 0.05, "position": 3.0}],
     }
 
     with pytest.raises(CollectorError, match="missing query dimension"):

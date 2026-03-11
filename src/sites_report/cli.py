@@ -170,7 +170,9 @@ def _fetch_project(
             "GA4 daily",
             lambda: ga4_collector.fetch(project, date),
             lambda d: insert_ga_daily(db_path, project.slug, date_iso, d),
-            project.slug, date_iso, failures,
+            project.slug,
+            date_iso,
+            failures,
         ):
             ok += 1
         else:
@@ -180,7 +182,9 @@ def _fetch_project(
             "GA4 top_pages",
             lambda: ga4_collector.fetch_top_pages(project, date),
             lambda d: insert_ga_top_pages(db_path, project.slug, date_iso, d),
-            project.slug, date_iso, failures,
+            project.slug,
+            date_iso,
+            failures,
         ):
             ok += 1
         else:
@@ -191,7 +195,9 @@ def _fetch_project(
             "GSC daily",
             lambda: gsc_collector.fetch(project, date),
             lambda d: insert_gsc_daily(db_path, project.slug, date_iso, d),
-            project.slug, date_iso, failures,
+            project.slug,
+            date_iso,
+            failures,
         ):
             ok += 1
         else:
@@ -201,7 +207,9 @@ def _fetch_project(
             "GSC top_queries",
             lambda: gsc_collector.fetch_top_queries(project, date),
             lambda d: insert_gsc_top_queries(db_path, project.slug, date_iso, d),
-            project.slug, date_iso, failures,
+            project.slug,
+            date_iso,
+            failures,
         ):
             ok += 1
         else:
@@ -262,10 +270,12 @@ def fetch(
 
         def _make_ga4():
             from sites_report.collectors.analytics import GA4Collector
+
             return GA4Collector(google_cfg)
 
         def _make_gsc():
             from sites_report.collectors.search_console import GSCCollector
+
             return GSCCollector(google_cfg)
 
         ga4_collector = _init_collector("GA4", _make_ga4)
@@ -286,8 +296,12 @@ def fetch(
     for date in dates:
         for project in projects:
             ok, bad = _fetch_project(
-                project, date, cfg.db_path,
-                ga4_collector, gsc_collector, failures,
+                project,
+                date,
+                cfg.db_path,
+                ga4_collector,
+                gsc_collector,
+                failures,
             )
             succeeded += ok
             failed += bad

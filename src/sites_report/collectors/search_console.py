@@ -68,29 +68,17 @@ class GSCCollector(Collector):
     def _require_site_url(self, project: ProjectConfig) -> str:
         if not project.gsc_site_url:
             logger.error("No gsc_site_url for project '%s'", project.slug)
-            raise CollectorError(
-                f"No gsc_site_url configured for project '{project.slug}'"
-            )
+            raise CollectorError(f"No gsc_site_url configured for project '{project.slug}'")
         return project.gsc_site_url
 
-    def _query(
-        self, site_url: str, body: dict, slug: str, date: datetime.date
-    ) -> dict:
+    def _query(self, site_url: str, body: dict, slug: str, date: datetime.date) -> dict:
         try:
-            return (
-                self._service.searchanalytics()
-                .query(siteUrl=site_url, body=body)
-                .execute()
-            )
+            return self._service.searchanalytics().query(siteUrl=site_url, body=body).execute()
         except (HttpError, GoogleAuthError) as exc:
             logger.error("GSC API error for '%s' on %s: %s", slug, date, exc)
-            raise CollectorError(
-                f"GSC API error for '{slug}' on {date}: {exc}"
-            ) from exc
+            raise CollectorError(f"GSC API error for '{slug}' on {date}: {exc}") from exc
 
-    def _parse_daily(
-        self, response: dict
-    ) -> dict[str, int | float | str | None]:
+    def _parse_daily(self, response: dict) -> dict[str, int | float | str | None]:
         rows = response.get("rows", [])
         if not rows:
             logger.debug("GSC returned no rows for daily query")
@@ -101,9 +89,7 @@ class GSCCollector(Collector):
             result[db_col] = _cast_metric(row.get(api_name), db_col, typ)
         return result
 
-    def _parse_top_queries(
-        self, response: dict
-    ) -> list[dict[str, int | float | str | None]]:
+    def _parse_top_queries(self, response: dict) -> list[dict[str, int | float | str | None]]:
         rows = response.get("rows", [])
         if not rows:
             logger.debug("GSC returned no rows for top-queries query")
@@ -114,9 +100,7 @@ class GSCCollector(Collector):
                 query_text = row["keys"][0]
             except (KeyError, IndexError) as exc:
                 logger.error("GSC response missing query dimension: %s", exc)
-                raise CollectorError(
-                    "GSC response missing query dimension"
-                ) from exc
+                raise CollectorError("GSC response missing query dimension") from exc
             entry: dict[str, int | float | str | None] = {"query": query_text}
             for api_name, (db_col, typ) in _TOP_QUERIES_METRICS.items():
                 entry[db_col] = _cast_metric(row.get(api_name), db_col, typ)
@@ -135,6 +119,4 @@ def _cast_metric(
         return typ(raw)
     except (ValueError, TypeError) as exc:
         logger.error("Cannot cast GSC metric '%s'=%r: %s", db_col, raw, exc)
-        raise CollectorError(
-            f"Cannot cast GSC metric '{db_col}' value {raw!r}: {exc}"
-        ) from exc
+        raise CollectorError(f"Cannot cast GSC metric '{db_col}' value {raw!r}: {exc}") from exc

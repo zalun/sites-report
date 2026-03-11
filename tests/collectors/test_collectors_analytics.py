@@ -92,9 +92,7 @@ def test_init_builds_credentials_and_client(
 
 @mock.patch(_PATCH_CLIENT)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_returns_daily_metrics(
-    mock_creds: MagicMock, mock_client_cls: MagicMock
-) -> None:
+def test_fetch_returns_daily_metrics(mock_creds: MagicMock, mock_client_cls: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_client_cls)
     row = _make_row(
         metric_values=["100", "80", "40", "500", "120.5", "0.35", "10"],
@@ -181,9 +179,7 @@ def test_fetch_raises_when_no_property_id(
 
 @mock.patch(_PATCH_CLIENT)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_wraps_google_api_error(
-    mock_creds: MagicMock, mock_client_cls: MagicMock
-) -> None:
+def test_fetch_wraps_google_api_error(mock_creds: MagicMock, mock_client_cls: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_client_cls)
     collector._client.run_report.side_effect = GoogleAPICallError("quota exceeded")
 
@@ -193,9 +189,7 @@ def test_fetch_wraps_google_api_error(
 
 @mock.patch(_PATCH_CLIENT)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_wraps_google_auth_error(
-    mock_creds: MagicMock, mock_client_cls: MagicMock
-) -> None:
+def test_fetch_wraps_google_auth_error(mock_creds: MagicMock, mock_client_cls: MagicMock) -> None:
     collector = _make_collector(mock_creds, mock_client_cls)
     collector._client.run_report.side_effect = GoogleAuthError("token expired")
 

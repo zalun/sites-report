@@ -224,12 +224,15 @@ def test_load_config_raises_on_invalid_schedule(tmp_path):
 
 
 def test_load_config_raises_on_duplicate_project_slugs(tmp_path):
-    toml = _minimal_toml() + """\
+    toml = (
+        _minimal_toml()
+        + """\
 [[projects]]
 name = "Duplicate"
 slug = "my-site"
 gsc_site_url = "https://example.com"
 """
+    )
     path = _write_toml_str(tmp_path, toml)
     with pytest.raises(ConfigError, match="Duplicate project slug"):
         load_config(path, resolve_env=False)
@@ -366,9 +369,7 @@ def test_load_config_raises_on_unreadable_file(tmp_path):
 
 
 def test_load_config_raises_on_missing_google_service_account_key(tmp_path):
-    toml = _minimal_toml().replace(
-        'service_account_key = "credentials/sa.json"', ""
-    )
+    toml = _minimal_toml().replace('service_account_key = "credentials/sa.json"', "")
     path = _write_toml_str(tmp_path, toml)
     with pytest.raises(ConfigError, match="Missing required google field"):
         load_config(path, resolve_env=False)
@@ -389,9 +390,7 @@ def test_load_config_raises_on_missing_project_slug(tmp_path):
 
 
 def test_load_config_raises_on_project_with_no_data_sources(tmp_path):
-    toml = _minimal_toml().replace(
-        'gsc_site_url = "https://example.com"', ""
-    )
+    toml = _minimal_toml().replace('gsc_site_url = "https://example.com"', "")
     path = _write_toml_str(tmp_path, toml)
     with pytest.raises(ConfigError, match="has no data sources configured"):
         load_config(path, resolve_env=False)

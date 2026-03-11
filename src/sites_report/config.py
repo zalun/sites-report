@@ -111,9 +111,7 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
     if "projects" not in data or len(data["projects"]) == 0:
         msg = "At least one [[projects]] entry is required"
         raise ConfigError(msg)
-    projects = tuple(
-        _parse_project(p, i) for i, p in enumerate(data["projects"])
-    )
+    projects = tuple(_parse_project(p, i) for i, p in enumerate(data["projects"]))
 
     slugs = [p.slug for p in projects]
     seen: set[str] = set()
@@ -128,8 +126,7 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
         msg = "At least one [[subscriptions]] entry is required"
         raise ConfigError(msg)
     subscriptions = tuple(
-        _parse_subscription(s, i, valid_slugs)
-        for i, s in enumerate(data["subscriptions"])
+        _parse_subscription(s, i, valid_slugs) for i, s in enumerate(data["subscriptions"])
     )
 
     _cross_validate(projects, google=google, vercel=vercel)
@@ -191,9 +188,7 @@ def _parse_vercel(data: dict, *, resolve_env: bool) -> VercelConfig:
         msg = "Missing required vercel field: 'api_token_env'"
         raise ConfigError(msg)
     return VercelConfig(
-        api_token=_resolve_env_var(
-            data["api_token_env"], "vercel.api_token", resolve=resolve_env
-        ),
+        api_token=_resolve_env_var(data["api_token_env"], "vercel.api_token", resolve=resolve_env),
     )
 
 
@@ -236,8 +231,7 @@ def _parse_subscription(data: dict, index: int, valid_slugs: frozenset[str]) -> 
     except ValueError:
         valid = ", ".join(s.value for s in Schedule)
         msg = (
-            f"Invalid schedule '{raw_schedule}' in subscriptions[{index}], "
-            f"must be one of: {valid}"
+            f"Invalid schedule '{raw_schedule}' in subscriptions[{index}], must be one of: {valid}"
         )
         raise ConfigError(msg) from None
 
@@ -277,7 +271,6 @@ def _cross_validate(
             raise ConfigError(msg)
         if p.vercel_project_id and vercel is None:
             msg = (
-                f"Project '{p.slug}' uses vercel_project_id "
-                "but no [vercel] section is configured"
+                f"Project '{p.slug}' uses vercel_project_id but no [vercel] section is configured"
             )
             raise ConfigError(msg)

@@ -94,7 +94,8 @@ class GA4Collector(Collector):
                 )
             logger.debug(
                 "Prepending 'properties/' prefix to ga4_property_id '%s' for project '%s'",
-                pid, project.slug,
+                pid,
+                project.slug,
             )
             pid = f"properties/{pid}"
         return pid
@@ -108,9 +109,7 @@ class GA4Collector(Collector):
             logger.error("GA4 API error for '%s' on %s: %s", slug, date, exc)
             raise CollectorError(f"GA4 API error for '{slug}' on {date}: {exc}") from exc
 
-    def _parse_daily(
-        self, response: RunReportResponse
-    ) -> dict[str, int | float | str | None]:
+    def _parse_daily(self, response: RunReportResponse) -> dict[str, int | float | str | None]:
         if not response.rows:
             return {db_col: None for db_col, _typ in _DAILY_METRICS.values()}
         row = response.rows[0]

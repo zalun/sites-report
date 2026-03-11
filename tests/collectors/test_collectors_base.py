@@ -53,7 +53,8 @@ def test_build_google_credentials_loads_from_key_file(mock_creds_cls, tmp_path):
 
     assert mock_creds_cls.from_service_account_file.call_count == 1
     assert mock_creds_cls.from_service_account_file.call_args == mock.call(
-        str(key_file), scopes=scopes,
+        str(key_file),
+        scopes=scopes,
     )
     assert result is mock_creds_cls.from_service_account_file.return_value
 

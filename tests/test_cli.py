@@ -55,9 +55,7 @@ def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 # --- init command ---
 
 
-def test_init_creates_database(
-    runner: CliRunner, config_path: Path, tmp_path: Path
-) -> None:
+def test_init_creates_database(runner: CliRunner, config_path: Path, tmp_path: Path) -> None:
     result = runner.invoke(cli, ["--config", str(config_path), "init"])
     assert result.exit_code == 0, result.output
     assert "initialized" in result.output.lower()
@@ -248,9 +246,7 @@ def test_fetch_calls_gsc_collector_for_configured_project(
 def test_fetch_defaults_to_yesterday(
     _ga4, _gsc, runner: CliRunner, fetch_config_path: Path
 ) -> None:
-    result = runner.invoke(
-        cli, ["--config", str(fetch_config_path), "fetch"]
-    )
+    result = runner.invoke(cli, ["--config", str(fetch_config_path), "fetch"])
     assert result.exit_code == 0, result.output
 
 
@@ -274,8 +270,13 @@ def test_fetch_range_option_fetches_multiple_days(
     result = runner.invoke(
         cli,
         [
-            "--config", str(fetch_config_path),
-            "fetch", "--date", "2025-03-03", "--range", "3",
+            "--config",
+            str(fetch_config_path),
+            "fetch",
+            "--date",
+            "2025-03-03",
+            "--range",
+            "3",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -291,8 +292,13 @@ def test_fetch_project_option_filters_projects(
     result = runner.invoke(
         cli,
         [
-            "--config", str(fetch_config_path),
-            "fetch", "--date", "2025-03-01", "--project", "site-a",
+            "--config",
+            str(fetch_config_path),
+            "fetch",
+            "--date",
+            "2025-03-01",
+            "--project",
+            "site-a",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -334,9 +340,7 @@ def test_fetch_continues_on_collector_error(
     assert "failure" in result.output.lower()
 
 
-def test_fetch_skips_unconfigured_sources(
-    runner: CliRunner, fetch_config_path: Path
-) -> None:
+def test_fetch_skips_unconfigured_sources(runner: CliRunner, fetch_config_path: Path) -> None:
     """Site B has only GA4 (no gsc_site_url)."""
     ga4 = _mock_ga4()
     gsc = _mock_gsc()
@@ -347,9 +351,13 @@ def test_fetch_skips_unconfigured_sources(
         return runner.invoke(
             cli,
             [
-                "--config", str(fetch_config_path),
-                "fetch", "--date", "2025-03-01",
-                "--project", "site-b",
+                "--config",
+                str(fetch_config_path),
+                "fetch",
+                "--date",
+                "2025-03-01",
+                "--project",
+                "site-b",
             ],
         )
 
@@ -359,9 +367,7 @@ def test_fetch_skips_unconfigured_sources(
     assert gsc.fetch.call_count == 0
 
 
-def test_fetch_rejects_invalid_date(
-    runner: CliRunner, fetch_config_path: Path
-) -> None:
+def test_fetch_rejects_invalid_date(runner: CliRunner, fetch_config_path: Path) -> None:
     result = runner.invoke(
         cli,
         ["--config", str(fetch_config_path), "fetch", "--date", "not-a-date"],
@@ -370,9 +376,7 @@ def test_fetch_rejects_invalid_date(
     assert "invalid date" in result.output.lower()
 
 
-def test_fetch_rejects_range_zero(
-    runner: CliRunner, fetch_config_path: Path
-) -> None:
+def test_fetch_rejects_range_zero(runner: CliRunner, fetch_config_path: Path) -> None:
     result = runner.invoke(
         cli,
         ["--config", str(fetch_config_path), "fetch", "--range", "0"],
