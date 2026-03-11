@@ -382,7 +382,12 @@ def report(
     preview: bool,
 ) -> None:
     """Generate and send analytics reports."""
-    from sites_report.reports.builder import build_report
+    try:
+        from sites_report.reports.builder import build_report
+    except ImportError as exc:
+        logger.error("Report builder dependencies not available: %s", exc)
+        click.echo(f"Report builder unavailable (missing dependency): {exc}", err=True)
+        raise SystemExit(1) from exc
 
     cfg = _load_config(ctx)
     sched = Schedule(schedule.lower())
