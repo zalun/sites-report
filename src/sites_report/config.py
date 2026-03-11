@@ -200,10 +200,30 @@ def _resolve_env_var(env_var_name: str, field_label: str, *, resolve: bool) -> s
 
 
 def _parse_email(data: dict, *, resolve_env: bool) -> EmailConfig:
-    for key in ("smtp_host", "smtp_port", "smtp_user", "smtp_password_env", "from_address"):
+    for key in ("smtp_host", "smtp_port", "smtp_user", "from_address"):
         if key not in data:
             msg = f"Missing required email field: '{key}'"
             raise ConfigError(msg)
+
+    has_password = "smtp_password" in data
+    has_password_env = "smtp_password_env" in data
+    if not has_password and not has_password_env:
+        msg = "Missing required email field: 'smtp_password' or 'smtp_password_env'"
+        raise ConfigError(msg)
+    if has_password and has_password_env:
+        msg = "email: specify either 'smtp_password' or 'smtp_password_env', not both"
+        raise ConfigError(msg)
+
+    if has_password:
+        password = data["smtp_password"]
+        if not isinstance(password, str) or not password:
+            msg = "email.smtp_password must be a non-empty string"
+            raise ConfigError(msg)
+    else:
+        password = _resolve_env_var(
+            data["smtp_password_env"], "email.smtp_password", resolve=resolve_env
+        )
+
     port = data["smtp_port"]
     if not isinstance(port, int) or not (1 <= port <= 65535):
         msg = f"email.smtp_port must be an integer between 1 and 65535, got: {port!r}"
@@ -212,9 +232,7 @@ def _parse_email(data: dict, *, resolve_env: bool) -> EmailConfig:
         smtp_host=data["smtp_host"],
         smtp_port=port,
         smtp_user=data["smtp_user"],
-        smtp_password=_resolve_env_var(
-            data["smtp_password_env"], "email.smtp_password", resolve=resolve_env
-        ),
+        smtp_password=password,
         from_address=data["from_address"],
     )
 

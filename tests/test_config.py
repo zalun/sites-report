@@ -229,6 +229,44 @@ def test_load_config_with_resolve_env_false(tmp_path):
     assert cfg.email.smtp_password == "<SMTP_PASSWORD>"
 
 
+def test_load_config_with_inline_smtp_password(tmp_path):
+    toml = _minimal_toml().replace(
+        'smtp_password_env = "SMTP_PASSWORD"',
+        'smtp_password = "inline_secret"',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    cfg = load_config(path)
+
+    assert cfg.email.smtp_password == "inline_secret"
+
+
+def test_load_config_raises_on_both_smtp_password_fields(tmp_path):
+    toml = _minimal_toml().replace(
+        'smtp_password_env = "SMTP_PASSWORD"',
+        'smtp_password = "x"\nsmtp_password_env = "SMTP_PASSWORD"',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match=r"either.*not both"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_missing_smtp_password(tmp_path):
+    toml = _minimal_toml().replace('smtp_password_env = "SMTP_PASSWORD"\n', "")
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match=r"smtp_password.*smtp_password_env"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_empty_inline_smtp_password(tmp_path):
+    toml = _minimal_toml().replace(
+        'smtp_password_env = "SMTP_PASSWORD"',
+        'smtp_password = ""',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="non-empty string"):
+        load_config(path, resolve_env=False)
+
+
 # ── Validation errors ───────────────────────────────────────────────
 
 
