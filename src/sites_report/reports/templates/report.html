@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">
+<tr><td align="center" style="padding:20px 10px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:600px;">
+
+{# ── Header ──────────────────────────────────────────── #}
+<tr><td style="background:#2c3e50;padding:24px 30px;">
+  <h1 style="margin:0;color:#ffffff;font-size:22px;">{{ subject }}</h1>
+  <span style="display:inline-block;margin-top:8px;padding:4px 12px;background:rgba(255,255,255,0.2);border-radius:12px;color:#ffffff;font-size:13px;">{{ schedule }}</span>
+</td></tr>
+
+{# ── Projects ────────────────────────────────────────── #}
+{% for project in projects %}
+<tr><td style="padding:30px;">
+
+  <h2 style="margin:0 0 4px;color:#2c3e50;font-size:20px;">{{ project.name }}</h2>
+  <p style="margin:0 0 16px;color:#6c757d;font-size:14px;">
+    {{ project.period }}
+    <br>
+    <span style="font-size:12px;">Comparing: {{ project.comparison_label.current }} vs {{ project.comparison_label.previous }}</span>
+  </p>
+
+  {# ── GA4 Metrics ──────────────────────────────────── #}
+  {% if project.ga4 %}
+  <h3 style="margin:0 0 8px;color:#2c3e50;font-size:16px;">Google Analytics</h3>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;border-collapse:collapse;">
+    <tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Metric</th>
+      <th style="padding:8px 12px;text-align:right;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Current</th>
+      <th style="padding:8px 12px;text-align:right;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Previous</th>
+      <th style="padding:8px 12px;text-align:right;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Change</th>
+    </tr>
+    {% for m in project.ga4.metrics %}
+    <tr>
+      <td style="padding:8px 12px;font-size:14px;border-bottom:1px solid #eee;">{{ m.label }}</td>
+      <td style="padding:8px 12px;font-size:14px;text-align:right;border-bottom:1px solid #eee;font-weight:bold;">{{ m.current }}</td>
+      <td style="padding:8px 12px;font-size:14px;text-align:right;border-bottom:1px solid #eee;color:#6c757d;">{{ m.previous }}</td>
+      <td style="padding:8px 12px;font-size:14px;text-align:right;border-bottom:1px solid #eee;color:{% if m.direction == 'positive' %}#28a745{% elif m.direction == 'negative' %}#dc3545{% else %}#6c757d{% endif %};font-weight:bold;">{{ m.change }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {# ── GSC Metrics ──────────────────────────────────── #}
+  {% if project.gsc %}
+  <h3 style="margin:0 0 8px;color:#2c3e50;font-size:16px;">Search Console</h3>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;border-collapse:collapse;">
+    <tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Metric</th>
+      <th style="padding:8px 12px;text-align:right;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Current</th>
+      <th style="padding:8px 12px;text-align:right;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Previous</th>
+      <th style="padding:8px 12px;text-align:right;font-size:13px;color:#6c757d;border-bottom:2px solid #dee2e6;">Change</th>
+    </tr>
+    {% for m in project.gsc.metrics %}
+    <tr>
+      <td style="padding:8px 12px;font-size:14px;border-bottom:1px solid #eee;">{{ m.label }}</td>
+      <td style="padding:8px 12px;font-size:14px;text-align:right;border-bottom:1px solid #eee;font-weight:bold;">{{ m.current }}</td>
+      <td style="padding:8px 12px;font-size:14px;text-align:right;border-bottom:1px solid #eee;color:#6c757d;">{{ m.previous }}</td>
+      <td style="padding:8px 12px;font-size:14px;text-align:right;border-bottom:1px solid #eee;color:{% if m.direction == 'positive' %}#28a745{% elif m.direction == 'negative' %}#dc3545{% else %}#6c757d{% endif %};font-weight:bold;">{{ m.change }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {# ── AI Highlights ────────────────────────────────── #}
+  {% if project.ai_highlights %}
+  <div style="margin-bottom:20px;padding:16px;background:#f0f7ff;border-left:4px solid #4285f4;border-radius:4px;">
+    <h3 style="margin:0 0 8px;color:#2c3e50;font-size:16px;">AI Highlights</h3>
+    <p style="margin:0;font-size:14px;color:#333;white-space:pre-line;">{{ project.ai_highlights }}</p>
+  </div>
+  {% endif %}
+
+  {# ── Charts ───────────────────────────────────────── #}
+  {% if project.charts.sessions_users %}
+  <div style="margin-bottom:16px;">
+    <img src="data:image/png;base64,{{ project.charts.sessions_users }}" width="560" style="display:block;max-width:100%;" alt="Sessions and Users trend">
+  </div>
+  {% endif %}
+
+  {% if project.charts.gsc_trend %}
+  <div style="margin-bottom:16px;">
+    <img src="data:image/png;base64,{{ project.charts.gsc_trend }}" width="560" style="display:block;max-width:100%;" alt="Clicks and Impressions trend">
+  </div>
+  {% endif %}
+
+  {% if project.charts.top_queries %}
+  <div style="margin-bottom:16px;">
+    <img src="data:image/png;base64,{{ project.charts.top_queries }}" width="560" style="display:block;max-width:100%;" alt="Top Search Queries">
+  </div>
+  {% endif %}
+
+  {% if project.charts.top_pages %}
+  <div style="margin-bottom:16px;">
+    <img src="data:image/png;base64,{{ project.charts.top_pages }}" width="560" style="display:block;max-width:100%;" alt="Top Pages">
+  </div>
+  {% endif %}
+
+</td></tr>
+
+{% if not loop.last %}
+<tr><td style="padding:0 30px;">
+  <hr style="border:none;border-top:1px solid #dee2e6;margin:0;">
+</td></tr>
+{% endif %}
+
+{% endfor %}
+
+{# ── Footer ──────────────────────────────────────────── #}
+<tr><td style="padding:20px 30px;background:#f8f9fa;border-top:1px solid #dee2e6;">
+  <p style="margin:0;font-size:12px;color:#6c757d;text-align:center;">
+    Generated at {{ generated_at }}
+  </p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
