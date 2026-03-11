@@ -241,6 +241,10 @@ def test_report_rejects_invalid_schedule(runner: CliRunner, report_config_path: 
     assert result.exit_code == 2
 
 
+# Note: build_report is patched at its definition site (sites_report.reports.builder)
+# because the report command uses a deferred local import that re-reads the module
+# attribute on every call. This is equivalent to patching at the consumer site.
+
 @mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
 def test_report_generates_daily(mock_build, runner: CliRunner, report_config_path: Path) -> None:
     result = runner.invoke(
@@ -343,6 +347,27 @@ def test_report_output_implies_no_send(
     )
     assert result.exit_code == 0, result.output
     assert "not implemented" not in result.output.lower()
+
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_without_no_send_exits_with_warning(
+    mock_build, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "email sending is not yet implemented" in result.output.lower()
+    assert "--no-send" in result.output
 
 
 def test_report_no_matching_subscriptions(runner: CliRunner, report_config_path: Path) -> None:

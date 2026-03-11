@@ -325,7 +325,13 @@ def fetch(
 
 
 def _default_report_date(schedule: Schedule, today: datetime.date | None = None) -> datetime.date:
-    """Compute a sensible default report date for the given schedule."""
+    """Compute a sensible default report date for the given schedule.
+
+    For daily: yesterday.
+    For weekly: last Sunday (last day of the previous full week).
+        ``_compute_date_ranges`` uses this to derive the Mon-Sun current period.
+    For monthly: last day of the previous month.
+    """
     if today is None:
         today = datetime.date.today()
     if schedule == Schedule.DAILY:
@@ -434,17 +440,28 @@ def report(
             try:
                 out.write_text(result.html)
             except OSError as exc:
+                logger.error("Cannot write report to %s: %s", out, exc)
                 click.echo(f"Cannot write report to {out}: {exc}", err=True)
                 raise SystemExit(1) from exc
             click.echo(f"Written to: {out}")
             last_output_file = out
 
-    if generated == 0 and matching:
+    failed = len(matching) - generated
+    if generated == 0 and failed > 0:
         click.echo("All subscriptions failed to generate.", err=True)
         raise SystemExit(1)
 
     if not no_send:
-        click.echo("Email sending not implemented yet.")
+        click.echo(
+            "Warning: email sending is not yet implemented. "
+            "Use --no-send --output <file> to save reports to disk.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    if failed > 0:
+        click.echo(f"{failed} of {len(matching)} subscription(s) failed.", err=True)
+        raise SystemExit(1)
 
     if preview and last_output_file is not None:
         try:
