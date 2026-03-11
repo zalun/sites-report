@@ -70,7 +70,7 @@ def _load_config(ctx: click.Context) -> Config:
 def cli(ctx: click.Context, config_path: str | None, *, verbose: bool) -> None:
     """Sites Report — site analytics reports from GA4, GSC, and Vercel."""
     ctx.ensure_object(dict)
-    if config_path:
+    if config_path is not None:
         ctx.obj["config_path"] = Path(config_path)
     else:
         try:

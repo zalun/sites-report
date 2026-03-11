@@ -430,6 +430,26 @@ def test_load_config_raises_on_missing_google_service_account_key(tmp_path):
         load_config(path, resolve_env=False)
 
 
+def test_load_config_raises_on_whitespace_only_service_account_key(tmp_path):
+    toml = _minimal_toml().replace(
+        'service_account_key = "credentials/sa.json"',
+        'service_account_key = "   "',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="must not be empty"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_non_string_log_level(tmp_path):
+    toml = _minimal_toml().replace(
+        "[email]",
+        '[general]\nlog_level = 42\n\n[email]',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="log_level must be a string"):
+        load_config(path, resolve_env=False)
+
+
 def test_load_config_raises_on_missing_vercel_api_token_env(tmp_path):
     toml = _minimal_toml() + "\n[vercel]\n"
     path = _write_toml_str(tmp_path, toml)

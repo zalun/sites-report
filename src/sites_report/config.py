@@ -31,7 +31,7 @@ def default_config_path() -> Path:
     """Return ``~/.sites-report/config.toml``."""
     try:
         home = Path.home()
-    except RuntimeError:
+    except (RuntimeError, KeyError):
         msg = (
             "Cannot determine home directory. "
             "Set HOME or use --config to specify a config path."
@@ -126,9 +126,14 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
     general = data.get("general", {})
     raw_db_path = general.get("db_path", "data/sites-report.db")
     db_path = _resolve_path(base_dir, raw_db_path, "general.db_path")
-    raw_log_level = general.get("log_level", "INFO").upper()
+    raw_log_level = general.get("log_level", "INFO")
+    if not isinstance(raw_log_level, str):
+        valid = ", ".join(lv.value for lv in LogLevel)
+        got = type(raw_log_level).__name__
+        msg = f"general.log_level must be a string, got {got}. Valid values: {valid}"
+        raise ConfigError(msg)
     try:
-        log_level = LogLevel(raw_log_level)
+        log_level = LogLevel(raw_log_level.upper())
     except ValueError:
         valid = ", ".join(lv.value for lv in LogLevel)
         msg = f"Invalid log_level '{raw_log_level}', must be one of: {valid}"
@@ -211,14 +216,13 @@ def _parse_email(data: dict, *, resolve_env: bool) -> EmailConfig:
 
 def _parse_google(data: dict, base_dir: Path) -> GoogleConfig:
     try:
-        return GoogleConfig(
-            service_account_key=_resolve_path(
-                base_dir, data["service_account_key"], "google.service_account_key"
-            ),
-        )
+        raw_key = data["service_account_key"]
     except KeyError as exc:
         msg = f"Missing required google field: {exc}"
         raise ConfigError(msg) from None
+    return GoogleConfig(
+        service_account_key=_resolve_path(base_dir, raw_key, "google.service_account_key"),
+    )
 
 
 def _parse_vercel(data: dict, *, resolve_env: bool) -> VercelConfig:
