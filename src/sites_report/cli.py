@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 import sys
+import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ from typing import Any
 import click
 
 from sites_report.collectors.base import CollectorError
-from sites_report.config import Config, ConfigError, ProjectConfig, load_config
+from sites_report.config import Config, ConfigError, ProjectConfig, Schedule, load_config
 from sites_report.db import (
     DatabaseError,
     get_db_status,
@@ -323,8 +324,152 @@ def fetch(
         raise SystemExit(1)
 
 
+def _default_report_date(schedule: Schedule, today: datetime.date | None = None) -> datetime.date:
+    """Compute a sensible default report date for the given schedule.
+
+    For daily: yesterday.
+    For weekly: last Sunday (last day of the previous full week).
+        ``_compute_date_ranges`` uses this to derive the Mon-Sun current period.
+    For monthly: last day of the previous month.
+    """
+    if today is None:
+        today = datetime.date.today()
+    if schedule == Schedule.DAILY:
+        return today - datetime.timedelta(days=1)
+    if schedule == Schedule.WEEKLY:
+        # Last Sunday (end of previous full week)
+        days_since_sunday = (today.weekday() + 1) % 7
+        if days_since_sunday == 0:
+            days_since_sunday = 7
+        return today - datetime.timedelta(days=days_since_sunday)
+    if schedule == Schedule.MONTHLY:
+        first_of_month = today.replace(day=1)
+        return first_of_month - datetime.timedelta(days=1)
+    msg = f"Unhandled schedule: {schedule!r}"
+    raise ValueError(msg)
+
+
 @cli.command()
-def report() -> None:
+@click.option(
+    "--schedule",
+    required=True,
+    type=click.Choice(["daily", "weekly", "monthly"], case_sensitive=False),
+    help="Which schedule frequency to generate.",
+)
+@click.option(
+    "--date",
+    "date_str",
+    default=None,
+    help="Report date YYYY-MM-DD (default: auto based on schedule)",
+)
+@click.option("--no-send", is_flag=True, help="Generate report but don't send email.")
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(),
+    default=None,
+    help="Write HTML to file (implies --no-send).",
+)
+@click.option("--preview", is_flag=True, help="Open report in browser after generating.")
+@click.pass_context
+def report(
+    ctx: click.Context,
+    schedule: str,
+    date_str: str | None,
+    *,
+    no_send: bool,
+    output_path: str | None,
+    preview: bool,
+) -> None:
     """Generate and send analytics reports."""
-    click.echo("Not implemented yet.", err=True)
-    raise SystemExit(1)
+    try:
+        from sites_report.reports.builder import build_report
+    except ImportError as exc:
+        logger.error("Report builder dependencies not available: %s", exc)
+        click.echo(f"Report builder unavailable (missing dependency): {exc}", err=True)
+        raise SystemExit(1) from exc
+
+    cfg = _load_config(ctx)
+    sched = Schedule(schedule.lower())
+
+    if output_path is not None:
+        no_send = True
+
+    if preview and output_path is None:
+        click.echo("--preview requires --output to specify a file path.", err=True)
+        raise SystemExit(1)
+
+    if date_str is not None:
+        try:
+            report_date = datetime.date.fromisoformat(date_str)
+        except ValueError:
+            click.echo(f"Invalid date format: {date_str!r} (expected YYYY-MM-DD)", err=True)
+            raise SystemExit(1) from None
+    else:
+        report_date = _default_report_date(sched)
+
+    try:
+        init_db(cfg.db_path)
+    except DatabaseError as exc:
+        click.echo(f"Database error: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+    matching = [s for s in cfg.subscriptions if s.schedule == sched]
+    if not matching:
+        click.echo(f"No subscriptions matching schedule '{schedule}'.")
+        return
+
+    last_output_file: Path | None = None
+    generated = 0
+
+    for idx, sub in enumerate(matching):
+        sub_projects = tuple(p for p in cfg.projects if p.slug in sub.projects)
+        try:
+            result = build_report(cfg.db_path, sub, sub_projects, sched, report_date)
+        except ValueError as exc:
+            logger.warning("Skipping subscription for %s: %s", sub.recipient, exc)
+            click.echo(f"Warning: skipping {sub.recipient}: {exc}", err=True)
+            continue
+        except Exception as exc:
+            logger.exception("Unexpected error building report for %s", sub.recipient)
+            click.echo(f"Error: failed to build report for {sub.recipient}: {exc}", err=True)
+            continue
+
+        generated += 1
+        click.echo(f"Generated: {result.subject} ({sub.recipient})")
+
+        if output_path is not None:
+            out = Path(output_path)
+            if len(matching) > 1:
+                out = out.with_stem(f"{out.stem}_{idx}")
+            try:
+                out.write_text(result.html)
+            except OSError as exc:
+                logger.error("Cannot write report to %s: %s", out, exc)
+                click.echo(f"Cannot write report to {out}: {exc}", err=True)
+                raise SystemExit(1) from exc
+            click.echo(f"Written to: {out}")
+            last_output_file = out
+
+    failed = len(matching) - generated
+    if generated == 0 and failed > 0:
+        click.echo("All subscriptions failed to generate.", err=True)
+        raise SystemExit(1)
+
+    if not no_send:
+        click.echo(
+            "Warning: email sending is not yet implemented. "
+            "Use --no-send --output <file> to save reports to disk.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    if failed > 0:
+        click.echo(f"{failed} of {len(matching)} subscription(s) failed.", err=True)
+        raise SystemExit(1)
+
+    if preview and last_output_file is not None:
+        try:
+            webbrowser.open(last_output_file.as_uri())
+        except (webbrowser.Error, OSError) as exc:
+            click.echo(f"Could not open browser: {exc}. View: {last_output_file}", err=True)

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from click.testing import CliRunner
 
-from sites_report.cli import cli
+from sites_report.cli import _default_report_date, cli
+from sites_report.config import Schedule
+from sites_report.reports.builder import Report
 
 MINIMAL_CONFIG = """\
 [email]
@@ -130,17 +133,7 @@ def test_verbose_flag_accepted(runner: CliRunner, config_path: Path) -> None:
     assert result.exit_code == 0, result.output
 
 
-# --- report placeholder ---
-
-
-def test_report_prints_not_implemented(runner: CliRunner) -> None:
-    result = runner.invoke(cli, ["report"])
-    assert result.exit_code == 1
-    assert "not implemented" in result.output.lower()
-
-
-# --- fetch command ---
-
+# --- shared config templates ---
 
 MULTI_PROJECT_CONFIG = """\
 [general]
@@ -172,6 +165,385 @@ recipient = "admin@test.com"
 projects = ["site-a", "site-b"]
 schedule = "daily"
 """
+
+
+# --- report command ---
+
+_MOCK_REPORT = Report(subject="Test Report", html="<html>test</html>")
+
+
+@pytest.fixture
+def report_config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Config with a daily subscription for report tests."""
+    db_path = tmp_path / "data" / "sites-report.db"
+    cfg_text = MULTI_PROJECT_CONFIG.format(db_path=db_path)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(cfg_text)
+    monkeypatch.setenv("TEST_SMTP_PASS", "secret")
+    return cfg
+
+
+TWO_SUBSCRIPTION_CONFIG = """\
+[general]
+db_path = "{db_path}"
+
+[email]
+smtp_host = "smtp.test.com"
+smtp_port = 587
+smtp_user = "test@test.com"
+smtp_password_env = "TEST_SMTP_PASS"
+from_address = "test@test.com"
+
+[google]
+service_account_key = "credentials/sa.json"
+
+[[projects]]
+name = "Site A"
+slug = "site-a"
+ga4_property_id = "properties/111"
+
+[[projects]]
+name = "Site B"
+slug = "site-b"
+ga4_property_id = "properties/222"
+
+[[subscriptions]]
+recipient = "admin@test.com"
+projects = ["site-a"]
+schedule = "daily"
+
+[[subscriptions]]
+recipient = "boss@test.com"
+projects = ["site-b"]
+schedule = "daily"
+"""
+
+
+@pytest.fixture
+def two_sub_config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    db_path = tmp_path / "data" / "sites-report.db"
+    cfg_text = TWO_SUBSCRIPTION_CONFIG.format(db_path=db_path)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(cfg_text)
+    monkeypatch.setenv("TEST_SMTP_PASS", "secret")
+    return cfg
+
+
+def test_report_requires_schedule(runner: CliRunner, report_config_path: Path) -> None:
+    result = runner.invoke(cli, ["--config", str(report_config_path), "report"])
+    assert result.exit_code == 2
+
+
+def test_report_rejects_invalid_schedule(runner: CliRunner, report_config_path: Path) -> None:
+    result = runner.invoke(
+        cli, ["--config", str(report_config_path), "report", "--schedule", "foo"]
+    )
+    assert result.exit_code == 2
+
+
+# Note: build_report is patched at its definition site (sites_report.reports.builder)
+# because the report command uses a deferred local import that re-reads the module
+# attribute on every call. This is equivalent to patching at the consumer site.
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_generates_daily(mock_build, runner: CliRunner, report_config_path: Path) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Test Report" in result.output
+
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_calls_build_report_with_correct_args(
+    mock_build, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert mock_build.call_count == 1
+    args = mock_build.call_args[0]
+    assert args[3] == Schedule.DAILY
+    assert args[4] == datetime.date(2025, 3, 1)
+
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_default_date_daily(
+    mock_build, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        ["--config", str(report_config_path), "report", "--schedule", "daily", "--no-send"],
+    )
+    assert result.exit_code == 0, result.output
+    expected = datetime.date.today() - datetime.timedelta(days=1)
+    args = mock_build.call_args[0]
+    assert args[4] == expected
+
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_output_writes_file(
+    mock_build, runner: CliRunner, report_config_path: Path, tmp_path: Path
+) -> None:
+    out_file = tmp_path / "report.html"
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--date",
+            "2025-03-01",
+            "--output",
+            str(out_file),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+    assert out_file.read_text() == "<html>test</html>"
+
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_output_implies_no_send(
+    mock_build, runner: CliRunner, report_config_path: Path, tmp_path: Path
+) -> None:
+    out_file = tmp_path / "report.html"
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--date",
+            "2025-03-01",
+            "--output",
+            str(out_file),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "not implemented" not in result.output.lower()
+
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_without_no_send_exits_with_warning(
+    mock_build, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "email sending is not yet implemented" in result.output.lower()
+    assert "--no-send" in result.output
+
+
+def test_report_no_matching_subscriptions(runner: CliRunner, report_config_path: Path) -> None:
+    result = runner.invoke(
+        cli,
+        ["--config", str(report_config_path), "report", "--schedule", "weekly", "--no-send"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "no subscriptions" in result.output.lower()
+
+
+def test_report_invalid_date_rejected(runner: CliRunner, report_config_path: Path) -> None:
+    result = runner.invoke(
+        cli,
+        ["--config", str(report_config_path), "report", "--schedule", "daily", "--date", "bad"],
+    )
+    assert result.exit_code == 1
+    assert "invalid date" in result.output.lower()
+
+
+@mock.patch(
+    "sites_report.reports.builder.build_report", side_effect=ValueError("No matching projects")
+)
+def test_report_build_error_logged(
+    mock_build, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "skipping" in result.output.lower()
+    assert "all subscriptions failed" in result.output.lower()
+
+
+@mock.patch(
+    "sites_report.reports.builder.build_report",
+    side_effect=RuntimeError("template rendering crashed"),
+)
+def test_report_unexpected_error_logged(
+    mock_build, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "failed to build report" in result.output.lower()
+
+
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_multiple_subscriptions(
+    mock_build, runner: CliRunner, two_sub_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(two_sub_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert mock_build.call_count == 2
+    assert "admin@test.com" in result.output
+    assert "boss@test.com" in result.output
+
+
+def test_report_preview_without_output_rejected(
+    runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--preview",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "--preview requires --output" in result.output
+
+
+@mock.patch("sites_report.cli.webbrowser.open", return_value=True)
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_preview_with_output_opens_browser(
+    mock_build,
+    mock_browser,
+    runner: CliRunner,
+    report_config_path: Path,
+    tmp_path: Path,
+) -> None:
+    out_file = tmp_path / "report.html"
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--preview",
+            "--date",
+            "2025-03-01",
+            "--output",
+            str(out_file),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert mock_browser.call_count == 1
+
+
+# --- _default_report_date tests ---
+
+
+def test_default_report_date_daily() -> None:
+    today = datetime.date(2025, 3, 12)
+    assert _default_report_date(Schedule.DAILY, today) == datetime.date(2025, 3, 11)
+
+
+def test_default_report_date_weekly_midweek() -> None:
+    # Wednesday 2025-03-12 -> last Sunday = 2025-03-09
+    today = datetime.date(2025, 3, 12)
+    result = _default_report_date(Schedule.WEEKLY, today)
+    assert result == datetime.date(2025, 3, 9)
+    assert result.weekday() == 6  # Sunday
+
+
+def test_default_report_date_weekly_on_sunday() -> None:
+    # Sunday 2025-03-09 -> previous Sunday = 2025-03-02
+    today = datetime.date(2025, 3, 9)
+    result = _default_report_date(Schedule.WEEKLY, today)
+    assert result == datetime.date(2025, 3, 2)
+    assert result.weekday() == 6
+
+
+def test_default_report_date_monthly() -> None:
+    today = datetime.date(2025, 3, 15)
+    assert _default_report_date(Schedule.MONTHLY, today) == datetime.date(2025, 2, 28)
+
+
+def test_default_report_date_monthly_jan_first() -> None:
+    today = datetime.date(2025, 1, 1)
+    assert _default_report_date(Schedule.MONTHLY, today) == datetime.date(2024, 12, 31)
+
+
+# --- fetch command ---
 
 
 @pytest.fixture
