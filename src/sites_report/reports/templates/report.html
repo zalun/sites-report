@@ -78,6 +78,7 @@
   {% endif %}
 
   {# ── Charts ───────────────────────────────────────── #}
+  {% if project.charts %}
   {% if project.charts.sessions_users %}
   <div style="margin-bottom:16px;">
     <img src="data:image/png;base64,{{ project.charts.sessions_users }}" width="560" style="display:block;max-width:100%;" alt="Sessions and Users trend">
@@ -100,6 +101,7 @@
   <div style="margin-bottom:16px;">
     <img src="data:image/png;base64,{{ project.charts.top_pages }}" width="560" style="display:block;max-width:100%;" alt="Top Pages">
   </div>
+  {% endif %}
   {% endif %}
 
 </td></tr>

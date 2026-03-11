@@ -76,3 +76,17 @@ def test_single_data_point_does_not_crash():
 
     assert result is not None
     assert result[:4] == _PNG_MAGIC
+
+
+def test_sessions_users_trend_returns_none_on_missing_key():
+    data = [{"date": "2025-03-01", "sessions": 100}]  # missing "users"
+    result = sessions_users_trend(data)
+
+    assert result is None
+
+
+def test_top_pages_returns_none_on_missing_key():
+    data = [{"wrong_key": "/home"}]  # missing "page_path" and "pageviews"
+    result = top_pages(data)
+
+    assert result is None

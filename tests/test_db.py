@@ -556,6 +556,8 @@ def test_get_top_pages_aggregates_across_days(tmp_path):
     assert rows[0]["page_path"] == "/home"
     assert rows[0]["pageviews"] == 220  # 100 + 120
     assert rows[0]["sessions"] == 170  # 80 + 90
+    # avg_time_on_page is weighted: (30.0*80 + 35.0*90) / 170 ≈ 32.647
+    assert abs(rows[0]["avg_time_on_page"] - (30.0 * 80 + 35.0 * 90) / 170) < 1e-6
 
 
 def test_get_top_pages_respects_limit(tmp_path):
@@ -609,6 +611,10 @@ def test_get_top_queries_aggregates_across_days(tmp_path):
     assert rows[0]["query"] == "python tutorial"
     assert rows[0]["clicks"] == 50  # 20 + 30
     assert rows[0]["impressions"] == 1100  # 500 + 600
+    # CTR is weighted: 50 / 1100 ≈ 0.04545
+    assert abs(rows[0]["ctr"] - 50 / 1100) < 1e-6
+    # Position is weighted: (5.0*500 + 4.0*600) / 1100 ≈ 4.4545
+    assert abs(rows[0]["position"] - (5.0 * 500 + 4.0 * 600) / 1100) < 1e-6
 
 
 def test_get_top_queries_respects_limit(tmp_path):

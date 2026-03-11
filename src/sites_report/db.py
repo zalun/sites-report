@@ -509,7 +509,13 @@ def insert_gsc_top_queries(
 # ── Query helpers ──────────────────────────────────────────────────
 
 
-def _query_rows(db_path: Path, sql: str, params: tuple) -> list[dict]:
+def _query_rows(
+    db_path: Path,
+    sql: str,
+    params: tuple,
+    *,
+    label: str = "query",
+) -> list[dict]:
     """Execute a query and return results as list of dicts."""
     if not db_path.exists():
         msg = f"Database file not found: {db_path}"
@@ -521,7 +527,7 @@ def _query_rows(db_path: Path, sql: str, params: tuple) -> list[dict]:
         rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
     except sqlite3.Error as exc:
-        msg = f"Query failed: {exc}"
+        msg = f"Query failed ({label}): {exc}"
         logger.error(msg)
         raise DatabaseError(msg) from exc
     finally:
@@ -538,6 +544,7 @@ def get_ga_daily(db_path: Path, slug: str, start_date: str, end_date: str) -> li
            WHERE project_slug = ? AND date >= ? AND date <= ?
            ORDER BY date""",
         (slug, start_date, end_date),
+        label=f"ga_daily for '{slug}'",
     )
 
 
@@ -550,6 +557,7 @@ def get_gsc_daily(db_path: Path, slug: str, start_date: str, end_date: str) -> l
            WHERE project_slug = ? AND date >= ? AND date <= ?
            ORDER BY date""",
         (slug, start_date, end_date),
+        label=f"gsc_daily for '{slug}'",
     )
 
 
@@ -560,13 +568,15 @@ def get_top_pages(
     return _query_rows(
         db_path,
         """SELECT page_path, SUM(pageviews) AS pageviews, SUM(sessions) AS sessions,
-                  AVG(avg_time_on_page) AS avg_time_on_page
+                  SUM(avg_time_on_page * sessions) * 1.0 / NULLIF(SUM(sessions), 0)
+                      AS avg_time_on_page
            FROM ga_top_pages
            WHERE project_slug = ? AND date >= ? AND date <= ?
            GROUP BY page_path
            ORDER BY pageviews DESC
            LIMIT ?""",
         (slug, start_date, end_date, limit),
+        label=f"ga_top_pages for '{slug}'",
     )
 
 
@@ -577,11 +587,14 @@ def get_top_queries(
     return _query_rows(
         db_path,
         """SELECT query, SUM(clicks) AS clicks, SUM(impressions) AS impressions,
-                  AVG(ctr) AS ctr, AVG(position) AS position
+                  SUM(clicks) * 1.0 / NULLIF(SUM(impressions), 0) AS ctr,
+                  SUM(position * impressions) * 1.0 / NULLIF(SUM(impressions), 0)
+                      AS position
            FROM gsc_top_queries
            WHERE project_slug = ? AND date >= ? AND date <= ?
            GROUP BY query
            ORDER BY clicks DESC
            LIMIT ?""",
         (slug, start_date, end_date, limit),
+        label=f"gsc_top_queries for '{slug}'",
     )
