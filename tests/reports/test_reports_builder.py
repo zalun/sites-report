@@ -10,8 +10,10 @@ import pytest
 
 from sites_report.config import ProjectConfig, Schedule, SubscriptionConfig
 from sites_report.reports.builder import (
+    _GA4_METRICS,
     Report,
     _aggregate,
+    _all_zeros,
     _build_comparison_labels,
     _build_period_label,
     _build_subject,
@@ -163,9 +165,7 @@ def test_format_change_inf():
 
 
 def test_compare_metric_increase_higher_is_better():
-    metric = _MetricDef(
-        "sessions", "Sessions", "sum", "integer", higher_is_better=True
-    )
+    metric = _MetricDef("sessions", "Sessions", "sum", "integer", higher_is_better=True)
     cur = [{"sessions": 200}]
     prev = [{"sessions": 100}]
     result = _compare_metric(cur, prev, metric)
@@ -175,7 +175,10 @@ def test_compare_metric_increase_higher_is_better():
 
 def test_compare_metric_increase_higher_is_bad():
     metric = _MetricDef(
-        "bounce_rate", "Bounce Rate", "avg", "percentage",
+        "bounce_rate",
+        "Bounce Rate",
+        "avg",
+        "percentage",
         higher_is_better=False,
     )
     cur = [{"bounce_rate": 0.6}]
@@ -185,18 +188,14 @@ def test_compare_metric_increase_higher_is_bad():
 
 
 def test_compare_metric_both_zero():
-    metric = _MetricDef(
-        "sessions", "Sessions", "sum", "integer", higher_is_better=True
-    )
+    metric = _MetricDef("sessions", "Sessions", "sum", "integer", higher_is_better=True)
     result = _compare_metric([], [], metric)
     assert result["direction"] == "neutral"
     assert result["change"] == "N/A"
 
 
 def test_compare_metric_previous_zero():
-    metric = _MetricDef(
-        "sessions", "Sessions", "sum", "integer", higher_is_better=True
-    )
+    metric = _MetricDef("sessions", "Sessions", "sum", "integer", higher_is_better=True)
     cur = [{"sessions": 100}]
     result = _compare_metric(cur, [], metric)
     assert result["change"] == "N/A"
@@ -321,9 +320,16 @@ def _png_stub() -> bytes:
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
 @mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
 def test_build_report_returns_report_dataclass(
-    _m_ga, _m_gsc, _m_pages, _m_queries,
-    _m_su, _m_gt, _m_tq, _m_tp,
-    sample_project_both, sample_subscription,
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
+    sample_project_both,
+    sample_subscription,
 ):
     report = build_report(
         Path("/fake/db"),
@@ -346,9 +352,16 @@ def test_build_report_returns_report_dataclass(
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
 @mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
 def test_build_report_html_contains_project_name(
-    _m_ga, _m_gsc, _m_pages, _m_queries,
-    _m_su, _m_gt, _m_tq, _m_tp,
-    sample_project_both, sample_subscription,
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
+    sample_project_both,
+    sample_subscription,
 ):
     report = build_report(
         Path("/fake/db"),
@@ -365,12 +378,13 @@ def test_build_report_html_contains_project_name(
 @mock.patch(f"{_P}.get_top_queries", return_value=[])
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
 def test_build_report_ga4_none_when_no_property_id(
-    _m_gsc, _m_queries, _m_gt, _m_tq,
+    _m_gsc,
+    _m_queries,
+    _m_gt,
+    _m_tq,
     sample_subscription,
 ):
-    project = ProjectConfig(
-        name="GSC Only", slug="my-site", gsc_site_url="https://example.com"
-    )
+    project = ProjectConfig(name="GSC Only", slug="my-site", gsc_site_url="https://example.com")
     report = build_report(
         Path("/fake/db"),
         sample_subscription,
@@ -386,12 +400,13 @@ def test_build_report_ga4_none_when_no_property_id(
 @mock.patch(f"{_P}.get_top_pages", return_value=[])
 @mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
 def test_build_report_gsc_none_when_no_site_url(
-    _m_ga, _m_pages, _m_su, _m_tp,
+    _m_ga,
+    _m_pages,
+    _m_su,
+    _m_tp,
     sample_subscription,
 ):
-    project = ProjectConfig(
-        name="GA4 Only", slug="my-site", ga4_property_id="properties/123"
-    )
+    project = ProjectConfig(name="GA4 Only", slug="my-site", ga4_property_id="properties/123")
     report = build_report(
         Path("/fake/db"),
         sample_subscription,
@@ -407,12 +422,13 @@ def test_build_report_gsc_none_when_no_site_url(
 @mock.patch(f"{_P}.get_top_pages", return_value=[])
 @mock.patch(f"{_P}.get_ga_daily", return_value=[])
 def test_build_report_ga4_none_when_no_data(
-    _m_ga, _m_pages, _m_su, _m_tp,
+    _m_ga,
+    _m_pages,
+    _m_su,
+    _m_tp,
     sample_subscription,
 ):
-    project = ProjectConfig(
-        name="Empty GA4", slug="my-site", ga4_property_id="properties/123"
-    )
+    project = ProjectConfig(name="Empty GA4", slug="my-site", ga4_property_id="properties/123")
     report = build_report(
         Path("/fake/db"),
         sample_subscription,
@@ -421,6 +437,118 @@ def test_build_report_ga4_none_when_no_data(
         datetime.date(2025, 3, 10),
     )
     assert "Google Analytics" not in report.html
+
+
+# ── All-zeros / no-movement ──────────────────────────────────────
+
+
+def _make_zero_ga4_rows(date: str = "2025-03-10") -> list[dict]:
+    return [
+        {
+            "date": date,
+            "sessions": 0,
+            "users": 0,
+            "new_users": 0,
+            "pageviews": 0,
+            "bounce_rate": 0,
+        },
+    ]
+
+
+def _make_zero_gsc_rows(date: str = "2025-03-10") -> list[dict]:
+    return [{"date": date, "clicks": 0, "impressions": 0, "ctr": 0, "avg_position": 0}]
+
+
+def test_all_zeros_true_for_zero_data():
+    assert _all_zeros(_make_zero_ga4_rows(), _GA4_METRICS) is True
+
+
+def test_all_zeros_false_for_nonzero_data():
+    assert _all_zeros(_make_ga4_rows(), _GA4_METRICS) is False
+
+
+def test_all_zeros_true_for_empty_data():
+    assert _all_zeros([], _GA4_METRICS) is True
+
+
+@mock.patch(f"{_P}.get_top_queries", return_value=[])
+@mock.patch(f"{_P}.get_top_pages", return_value=[])
+@mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
+@mock.patch(f"{_P}.get_ga_daily", return_value=_make_zero_ga4_rows())
+def test_build_report_ga4_no_movement_when_all_zeros(
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    sample_project_both,
+    sample_subscription,
+):
+    report = build_report(
+        Path("/fake/db"),
+        sample_subscription,
+        (sample_project_both,),
+        Schedule.DAILY,
+        datetime.date(2025, 3, 10),
+    )
+    assert "No movement" in report.html
+    assert "Google Analytics" in report.html
+    # Should not contain the metrics table headers
+    assert "Sessions" not in report.html
+
+
+@mock.patch(f"{_P}.get_top_queries", return_value=[])
+@mock.patch(f"{_P}.get_top_pages", return_value=[])
+@mock.patch(f"{_P}.get_gsc_daily", return_value=_make_zero_gsc_rows())
+@mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
+def test_build_report_gsc_no_movement_when_all_zeros(
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    sample_project_both,
+    sample_subscription,
+):
+    report = build_report(
+        Path("/fake/db"),
+        sample_subscription,
+        (sample_project_both,),
+        Schedule.DAILY,
+        datetime.date(2025, 3, 10),
+    )
+    assert "Search Console" in report.html
+    assert "No movement" in report.html
+    # GSC table headers should not appear
+    assert "Clicks" not in report.html
+
+
+@mock.patch(f"{_P}.charts.sessions_users_trend", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
+@mock.patch(f"{_P}.get_top_queries", return_value=[])
+@mock.patch(f"{_P}.get_top_pages", return_value=[])
+@mock.patch(f"{_P}.get_gsc_daily", return_value=_make_zero_gsc_rows())
+@mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
+def test_build_report_skips_charts_for_zero_source(
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    m_tp,
+    m_su,
+    sample_project_both,
+    sample_subscription,
+):
+    report = build_report(
+        Path("/fake/db"),
+        sample_subscription,
+        (sample_project_both,),
+        Schedule.DAILY,
+        datetime.date(2025, 3, 10),
+    )
+    # GA4 has data, so its charts should be generated
+    assert m_su.call_count == 1
+    assert m_tp.call_count == 1
+    # GSC is all zeros, so gsc_trend and top_queries charts should NOT appear
+    assert "Clicks and Impressions" not in report.html
 
 
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
@@ -432,9 +560,16 @@ def test_build_report_ga4_none_when_no_data(
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
 @mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
 def test_build_report_calls_chart_functions(
-    _m_ga, _m_gsc, _m_pages, _m_queries,
-    m_su, m_gt, m_tq, m_tp,
-    sample_project_both, sample_subscription,
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    m_su,
+    m_gt,
+    m_tq,
+    m_tp,
+    sample_project_both,
+    sample_subscription,
 ):
     build_report(
         Path("/fake/db"),
@@ -458,9 +593,16 @@ def test_build_report_calls_chart_functions(
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
 @mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
 def test_build_report_encodes_charts_as_base64(
-    _m_ga, _m_gsc, _m_pages, _m_queries,
-    _m_su, _m_gt, _m_tq, _m_tp,
-    sample_project_both, sample_subscription,
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
+    sample_project_both,
+    sample_subscription,
 ):
     report = build_report(
         Path("/fake/db"),
@@ -481,21 +623,28 @@ def test_build_report_encodes_charts_as_base64(
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
 @mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
 def test_build_report_multiple_projects(
-    _m_ga, _m_gsc, _m_pages, _m_queries,
-    _m_su, _m_gt, _m_tq, _m_tp,
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
 ):
     p1 = ProjectConfig(name="Site A", slug="site-a", ga4_property_id="p/1")
-    p2 = ProjectConfig(
-        name="Site B", slug="site-b", gsc_site_url="https://b.com"
-    )
+    p2 = ProjectConfig(name="Site B", slug="site-b", gsc_site_url="https://b.com")
     sub = SubscriptionConfig(
         recipient="test@example.com",
         projects=("site-a", "site-b"),
         schedule=Schedule.DAILY,
     )
     report = build_report(
-        Path("/fake/db"), sub, (p1, p2),
-        Schedule.DAILY, datetime.date(2025, 3, 10),
+        Path("/fake/db"),
+        sub,
+        (p1, p2),
+        Schedule.DAILY,
+        datetime.date(2025, 3, 10),
     )
     assert "Site A" in report.html
     assert "Site B" in report.html
@@ -510,13 +659,21 @@ def test_build_report_multiple_projects(
 @mock.patch(f"{_P}.get_gsc_daily", return_value=[])
 @mock.patch(f"{_P}.get_ga_daily", return_value=[])
 def test_build_report_empty_db_still_renders(
-    _m_ga, _m_gsc, _m_pages, _m_queries,
-    _m_su, _m_gt, _m_tq, _m_tp,
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
     sample_subscription,
 ):
     project = ProjectConfig(
-        name="Empty", slug="my-site",
-        ga4_property_id="p/1", gsc_site_url="https://e.com",
+        name="Empty",
+        slug="my-site",
+        ga4_property_id="p/1",
+        gsc_site_url="https://e.com",
     )
     report = build_report(
         Path("/fake/db"),
@@ -535,11 +692,12 @@ def test_build_report_raises_when_no_projects_match():
         projects=("nonexistent",),
         schedule=Schedule.DAILY,
     )
-    project = ProjectConfig(
-        name="Real", slug="real-site", ga4_property_id="p/1"
-    )
+    project = ProjectConfig(name="Real", slug="real-site", ga4_property_id="p/1")
     with pytest.raises(ValueError, match="No matching projects"):
         build_report(
-            Path("/fake/db"), sub, (project,),
-            Schedule.DAILY, datetime.date(2025, 3, 10),
+            Path("/fake/db"),
+            sub,
+            (project,),
+            Schedule.DAILY,
+            datetime.date(2025, 3, 10),
         )

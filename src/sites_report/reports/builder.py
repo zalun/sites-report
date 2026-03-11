@@ -136,9 +136,7 @@ def _compute_date_ranges(schedule: Schedule, report_date: datetime.date) -> _Dat
     )
 
 
-def _aggregate(
-    data: list[dict], key: str, method: Literal["sum", "avg"]
-) -> float:
+def _aggregate(data: list[dict], key: str, method: Literal["sum", "avg"]) -> float:
     """Aggregate a metric across rows. Filters None values. Returns 0.0 for empty."""
     values = [v for row in data if (v := row.get(key)) is not None]
     if not values and data:
@@ -161,9 +159,7 @@ def _aggregate(
     raise ValueError(msg)
 
 
-def _format_value(
-    value: float, fmt: Literal["integer", "percentage", "position"]
-) -> str:
+def _format_value(value: float, fmt: Literal["integer", "percentage", "position"]) -> str:
     """Format a numeric value for display."""
     if math.isnan(value) or math.isinf(value):
         logger.warning("Cannot format non-finite value %r as '%s'", value, fmt)
@@ -212,6 +208,14 @@ def _compare_metric(
         "change": _format_change(pct_change),
         "direction": direction,
     }
+
+
+def _all_zeros(data: list[dict], metrics: tuple[_MetricDef, ...]) -> bool:
+    """Return True if every metric aggregates to zero across both current and previous."""
+    return all(
+        _aggregate(data, m.key, m.aggregate) == 0.0
+        for m in metrics
+    )
 
 
 def _encode_chart(png_bytes: bytes | None) -> str | None:
@@ -344,14 +348,19 @@ def _build_project_context(
 
     # GA4
     ga4_ctx = None
+    ga4_has_data = False
     has_ga4 = project.ga4_property_id is not None
     if has_ga4:
         cur_ga = get_ga_daily(db_path, project.slug, current_start, current_end)
         prev_ga = get_ga_daily(db_path, project.slug, previous_start, previous_end)
         if cur_ga or prev_ga:
-            ga4_ctx = {
-                "metrics": [_compare_metric(cur_ga, prev_ga, m) for m in _GA4_METRICS],
-            }
+            if _all_zeros(cur_ga, _GA4_METRICS) and _all_zeros(prev_ga, _GA4_METRICS):
+                ga4_ctx = {"no_movement": True}
+            else:
+                ga4_has_data = True
+                ga4_ctx = {
+                    "metrics": [_compare_metric(cur_ga, prev_ga, m) for m in _GA4_METRICS],
+                }
         else:
             logger.info(
                 "No GA4 data for project '%s' in range %s to %s",
@@ -362,14 +371,19 @@ def _build_project_context(
 
     # GSC
     gsc_ctx = None
+    gsc_has_data = False
     has_gsc = project.gsc_site_url is not None
     if has_gsc:
         cur_gsc = get_gsc_daily(db_path, project.slug, current_start, current_end)
         prev_gsc = get_gsc_daily(db_path, project.slug, previous_start, previous_end)
         if cur_gsc or prev_gsc:
-            gsc_ctx = {
-                "metrics": [_compare_metric(cur_gsc, prev_gsc, m) for m in _GSC_METRICS],
-            }
+            if _all_zeros(cur_gsc, _GSC_METRICS) and _all_zeros(prev_gsc, _GSC_METRICS):
+                gsc_ctx = {"no_movement": True}
+            else:
+                gsc_has_data = True
+                gsc_ctx = {
+                    "metrics": [_compare_metric(cur_gsc, prev_gsc, m) for m in _GSC_METRICS],
+                }
         else:
             logger.info(
                 "No GSC data for project '%s' in range %s to %s",
@@ -378,8 +392,9 @@ def _build_project_context(
                 current_end,
             )
 
+    # Only generate charts when there is actual non-zero data
     chart_data = _build_charts(
-        db_path, project.slug, ranges, has_ga4=has_ga4, has_gsc=has_gsc
+        db_path, project.slug, ranges, has_ga4=ga4_has_data, has_gsc=gsc_has_data
     )
 
     return {
@@ -446,9 +461,7 @@ def build_report(
     template_context = {
         "subject": subject,
         "schedule": schedule.value.capitalize(),
-        "generated_at": datetime.datetime.now(tz=datetime.UTC).strftime(
-            "%Y-%m-%d %H:%M UTC"
-        ),
+        "generated_at": datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "projects": project_contexts,
     }
 
