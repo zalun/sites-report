@@ -31,7 +31,7 @@ def send_email(cfg: EmailConfig, to: str, subject: str, html: str) -> None:
         msg["Subject"] = subject
         msg["From"] = cfg.from_address
         msg["To"] = to
-    except Exception as exc:
+    except (TypeError, ValueError, AttributeError, UnicodeEncodeError) as exc:
         logger.error("Failed to construct email for %s: %s", to, exc)
         raise EmailError(f"Failed to construct email for {to}: {exc}") from exc
 

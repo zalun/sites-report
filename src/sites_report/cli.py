@@ -389,6 +389,13 @@ def report(
         click.echo(f"Report builder unavailable (missing dependency): {exc}", err=True)
         raise SystemExit(1) from exc
 
+    try:
+        from sites_report.email import EmailError, send_email
+    except ImportError as exc:
+        logger.error("Email sending dependencies not available: %s", exc)
+        click.echo(f"Email sender unavailable (missing dependency): {exc}", err=True)
+        raise SystemExit(1) from exc
+
     cfg = _load_config(ctx)
     sched = Schedule(schedule.lower())
 
@@ -418,14 +425,6 @@ def report(
     if not matching:
         click.echo(f"No subscriptions matching schedule '{schedule}'.")
         return
-
-    if not no_send:
-        try:
-            from sites_report.email import EmailError, send_email
-        except ImportError as exc:
-            logger.error("Email sending dependencies not available: %s", exc)
-            click.echo(f"Email sender unavailable (missing dependency): {exc}", err=True)
-            raise SystemExit(1) from exc
 
     last_output_file: Path | None = None
     generated = 0
