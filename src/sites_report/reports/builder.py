@@ -6,6 +6,7 @@ import base64
 import calendar
 import datetime
 import logging
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -135,7 +136,9 @@ def _compute_date_ranges(schedule: Schedule, report_date: datetime.date) -> _Dat
     )
 
 
-def _aggregate(data: list[dict], key: str, method: str) -> float:
+def _aggregate(
+    data: list[dict], key: str, method: Literal["sum", "avg"]
+) -> float:
     """Aggregate a metric across rows. Filters None values. Returns 0.0 for empty."""
     values = [v for row in data if (v := row.get(key)) is not None]
     if not values and data:
@@ -146,16 +149,25 @@ def _aggregate(data: list[dict], key: str, method: str) -> float:
         )
     if not values:
         return 0.0
-    if method == "sum":
-        return float(sum(values))
-    if method == "avg":
-        return sum(values) / len(values)
+    try:
+        if method == "sum":
+            return float(sum(values))
+        if method == "avg":
+            return sum(values) / len(values)
+    except TypeError as exc:
+        msg = f"Non-numeric values for metric '{key}': {values[:3]!r}"
+        raise TypeError(msg) from exc
     msg = f"Unknown aggregation method: {method!r}"
     raise ValueError(msg)
 
 
-def _format_value(value: float, fmt: str) -> str:
+def _format_value(
+    value: float, fmt: Literal["integer", "percentage", "position"]
+) -> str:
     """Format a numeric value for display."""
+    if math.isnan(value) or math.isinf(value):
+        logger.warning("Cannot format non-finite value %r as '%s'", value, fmt)
+        return "N/A"
     if fmt == "integer":
         return f"{round(value):,}"
     if fmt == "percentage":
@@ -383,8 +395,19 @@ def _build_project_context(
 
 def _render_template(context: dict) -> str:
     """Render the report HTML template."""
-    template = _JINJA_ENV.get_template("report.html")
-    return template.render(**context)
+    try:
+        template = _JINJA_ENV.get_template("report.html")
+        return template.render(**context)
+    except jinja2.TemplateNotFound as exc:
+        logger.error(
+            "Report template not found: %s (searched in %s)",
+            exc.name,
+            _TEMPLATE_DIR,
+        )
+        raise
+    except jinja2.TemplateError as exc:
+        logger.error("Failed to render report template: %s", exc)
+        raise
 
 
 # ── Public API ────────────────────────────────────────────────────
@@ -408,17 +431,17 @@ def build_report(
     project_contexts = []
     for project in projects:
         if project.slug in subscription.projects:
+            logger.debug("Building context for project '%s'", project.slug)
             ctx = _build_project_context(db_path, project, schedule, ranges)
             project_contexts.append(ctx)
 
     if not project_contexts:
-        logger.warning(
-            "No matching projects for subscription '%s' — "
-            "subscription.projects=%s, available slugs=%s",
-            subscription.recipient,
-            subscription.projects,
-            [p.slug for p in projects],
+        msg = (
+            f"No matching projects for subscription '{subscription.recipient}': "
+            f"requested {subscription.projects}, "
+            f"available {[p.slug for p in projects]}"
         )
+        raise ValueError(msg)
 
     template_context = {
         "subject": subject,

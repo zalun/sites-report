@@ -98,7 +98,13 @@ def test_aggregate_empty_returns_zero():
 def test_aggregate_unknown_method_raises():
     data = [{"x": 1}]
     with pytest.raises(ValueError, match="Unknown aggregation method"):
-        _aggregate(data, "x", "median")
+        _aggregate(data, "x", "median")  # type: ignore[arg-type]
+
+
+def test_aggregate_non_numeric_raises():
+    data = [{"x": "not_a_number"}]
+    with pytest.raises(TypeError, match="Non-numeric values"):
+        _aggregate(data, "x", "sum")
 
 
 # ── Formatting ────────────────────────────────────────────────────
@@ -118,7 +124,15 @@ def test_format_value_position():
 
 def test_format_value_unknown_raises():
     with pytest.raises(ValueError, match="Unknown format type"):
-        _format_value(1.0, "duration")
+        _format_value(1.0, "duration")  # type: ignore[arg-type]
+
+
+def test_format_value_nan_returns_na():
+    assert _format_value(float("nan"), "integer") == "N/A"
+
+
+def test_format_value_inf_returns_na():
+    assert _format_value(float("inf"), "percentage") == "N/A"
 
 
 def test_format_change_positive():
@@ -505,3 +519,19 @@ def test_build_report_empty_db_still_renders(
     )
     assert isinstance(report, Report)
     assert "Empty" in report.html
+
+
+def test_build_report_raises_when_no_projects_match():
+    sub = SubscriptionConfig(
+        recipient="test@example.com",
+        projects=("nonexistent",),
+        schedule=Schedule.DAILY,
+    )
+    project = ProjectConfig(
+        name="Real", slug="real-site", ga4_property_id="p/1"
+    )
+    with pytest.raises(ValueError, match="No matching projects"):
+        build_report(
+            Path("/fake/db"), sub, (project,),
+            Schedule.DAILY, datetime.date(2025, 3, 10),
+        )

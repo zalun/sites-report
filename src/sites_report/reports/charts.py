@@ -62,7 +62,7 @@ def sessions_users_trend(data: list[dict]) -> bytes | None:
         fig.autofmt_xdate()
 
         return _render_to_png(fig)
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
         logger.error("sessions_users_trend: bad data - %s (%d rows)", exc, len(data))
         plt.close(fig)
         return None
@@ -107,7 +107,7 @@ def gsc_clicks_impressions_trend(data: list[dict]) -> bytes | None:
         fig.autofmt_xdate()
 
         return _render_to_png(fig)
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
         logger.error(
             "gsc_clicks_impressions_trend: bad data - %s (%d rows)",
             exc,
@@ -141,7 +141,7 @@ def top_search_queries(data: list[dict], *, limit: int = 10) -> bytes | None:
         fig.tight_layout()
 
         return _render_to_png(fig)
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
         logger.error("top_search_queries: bad data - %s (%d rows)", exc, len(data))
         plt.close(fig)
         return None
@@ -171,7 +171,7 @@ def top_pages(data: list[dict], *, limit: int = 10) -> bytes | None:
         fig.tight_layout()
 
         return _render_to_png(fig)
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
         logger.error("top_pages: bad data - %s (%d rows)", exc, len(data))
         plt.close(fig)
         return None
