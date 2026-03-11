@@ -37,6 +37,7 @@ sites-report/
 │       ├── __init__.py
 │       ├── builder.py             # Report orchestration
 │       ├── charts.py              # matplotlib charts
+│       ├── insights.py            # AI-powered highlights via claude -p
 │       └── templates/
 │           └── report.html        # Jinja2 email template
 ├── tests/
@@ -266,6 +267,15 @@ Setup steps:
 
 Charts rendered by `matplotlib` to PNG, base64-encoded and embedded in HTML email as `<img src="data:image/png;base64,...">`.
 
+### AI Highlights
+
+Each report includes an AI-generated "highlights" section produced by piping collected metrics to `claude -p` (Claude CLI in pipe mode) via `subprocess`. The prompt includes the summary table data, period-over-period changes, top queries, and top pages for each project. Claude identifies noteworthy patterns: significant metric swings, new entries in top queries/pages, anomalies, and trends worth attention.
+
+- Placed after the summary table, before the charts.
+- Each project gets its own analysis based on its specific data.
+- Non-deterministic by design — each report may surface different observations.
+- Graceful fallback: if `claude` is unavailable or fails, the section is omitted silently.
+
 ### Daily report email:
 ```
 Subject: Sites Report (Daily): {date}
@@ -283,6 +293,8 @@ For each subscribed project:
   | GSC Clicks      | 567       | 500                | +13%   |
   | GSC Impressions | 12,345    | 11,000             | +12%   |
   | Avg Position    | 15.2      | 16.1               | +0.9   |
+
+  [AI Highlights — noteworthy observations]
 
   [Sessions/Users trend chart — last 30 days]
   [GSC Clicks/Impressions trend chart — last 30 days]
@@ -308,6 +320,8 @@ For each subscribed project:
   | GSC Impressions | 85,000    | 78,000    | +9%    |
   | Avg Position    | 15.2      | 16.1      | +0.9   |
 
+  [AI Highlights — noteworthy observations]
+
   [Sessions/Users trend chart — last 4 weeks]
   [GSC Clicks/Impressions trend chart — last 4 weeks]
   [Top Queries bar chart]
@@ -331,6 +345,8 @@ For each subscribed project:
   | GSC Clicks      | 16,000     | 14,500     | +10%   |
   | GSC Impressions | 350,000    | 320,000    | +9%    |
   | Avg Position    | 14.8       | 15.5       | +0.7   |
+
+  [AI Highlights — noteworthy observations]
 
   [Sessions/Users trend chart — last 6 months]
   [GSC Clicks/Impressions trend chart — last 6 months]
@@ -392,9 +408,10 @@ Note: The daily cron handles `fetch` for all projects. Weekly and monthly only n
 
 ### Phase 3: Reports
 1. `reports/charts.py` — chart generation functions.
-2. `reports/templates/report.html` — Jinja2 template (handles both daily and weekly).
-3. `reports/builder.py` — query data, generate charts, render HTML. Respects project schedule.
-4. `cli.py` `report --no-send --output` for local testing.
+2. `reports/insights.py` — format data prompt, call `claude -p` via subprocess, parse response.
+3. `reports/templates/report.html` — Jinja2 template (handles both daily and weekly).
+4. `reports/builder.py` — query data, generate charts, render HTML. Respects project schedule.
+5. `cli.py` `report --no-send --output` for local testing.
 
 **Deliverable**: `sites-report report --no-send --output test.html` produces a viewable report.
 
@@ -440,7 +457,9 @@ dev-dependencies = [
 ]
 ```
 
-Stdlib modules (no extra dependencies): `sqlite3`, `smtplib`, `email`, `tomllib`, `logging`.
+Stdlib modules (no extra dependencies): `sqlite3`, `smtplib`, `email`, `tomllib`, `logging`, `subprocess`.
+
+External CLI: `claude` (Anthropic CLI) must be on PATH for AI highlights generation.
 
 ---
 
