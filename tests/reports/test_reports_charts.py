@@ -90,3 +90,10 @@ def test_top_pages_returns_none_on_missing_key():
     result = top_pages(data)
 
     assert result is None
+
+
+def test_sessions_users_trend_returns_none_on_bad_type():
+    data = [{"date": "2025-03-01", "sessions": "not_a_number", "users": {}}]
+    result = sessions_users_trend(data)
+
+    assert result is None

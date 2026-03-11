@@ -62,8 +62,8 @@ def sessions_users_trend(data: list[dict]) -> bytes | None:
         fig.autofmt_xdate()
 
         return _render_to_png(fig)
-    except KeyError as exc:
-        logger.error("sessions_users_trend: missing key %s in data (%d rows)", exc, len(data))
+    except (KeyError, TypeError) as exc:
+        logger.error("sessions_users_trend: bad data - %s (%d rows)", exc, len(data))
         plt.close(fig)
         return None
 
@@ -107,9 +107,9 @@ def gsc_clicks_impressions_trend(data: list[dict]) -> bytes | None:
         fig.autofmt_xdate()
 
         return _render_to_png(fig)
-    except KeyError as exc:
+    except (KeyError, TypeError) as exc:
         logger.error(
-            "gsc_clicks_impressions_trend: missing key %s in data (%d rows)",
+            "gsc_clicks_impressions_trend: bad data - %s (%d rows)",
             exc,
             len(data),
         )
@@ -125,9 +125,12 @@ def top_search_queries(data: list[dict], *, limit: int = 10) -> bytes | None:
     if not data:
         return None
 
+    entries = data[:limit]
+    if not entries:
+        return None
+
     fig, ax = plt.subplots(figsize=(_FIG_WIDTH, _FIG_HEIGHT))
     try:
-        entries = data[:limit]
         queries = [d["query"] for d in reversed(entries)]
         clicks = [d["clicks"] for d in reversed(entries)]
 
@@ -138,8 +141,8 @@ def top_search_queries(data: list[dict], *, limit: int = 10) -> bytes | None:
         fig.tight_layout()
 
         return _render_to_png(fig)
-    except KeyError as exc:
-        logger.error("top_search_queries: missing key %s in data (%d rows)", exc, len(data))
+    except (KeyError, TypeError) as exc:
+        logger.error("top_search_queries: bad data - %s (%d rows)", exc, len(data))
         plt.close(fig)
         return None
 
@@ -152,9 +155,12 @@ def top_pages(data: list[dict], *, limit: int = 10) -> bytes | None:
     if not data:
         return None
 
+    entries = data[:limit]
+    if not entries:
+        return None
+
     fig, ax = plt.subplots(figsize=(_FIG_WIDTH, _FIG_HEIGHT))
     try:
-        entries = data[:limit]
         paths = [d["page_path"] for d in reversed(entries)]
         views = [d["pageviews"] for d in reversed(entries)]
 
@@ -165,7 +171,7 @@ def top_pages(data: list[dict], *, limit: int = 10) -> bytes | None:
         fig.tight_layout()
 
         return _render_to_png(fig)
-    except KeyError as exc:
-        logger.error("top_pages: missing key %s in data (%d rows)", exc, len(data))
+    except (KeyError, TypeError) as exc:
+        logger.error("top_pages: bad data - %s (%d rows)", exc, len(data))
         plt.close(fig)
         return None
