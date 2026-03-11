@@ -26,6 +26,7 @@ def generate_highlights(
     or ``None`` when data is insufficient or the CLI is unavailable.
     """
     if not _has_meaningful_data(ga4_metrics, gsc_metrics, pages, queries):
+        logger.debug("Skipping AI highlights for '%s': no meaningful data", project_name)
         return None
 
     try:
@@ -33,7 +34,7 @@ def generate_highlights(
             project_name, schedule, ga4_metrics, gsc_metrics, pages, queries
         )
     except (KeyError, TypeError) as exc:
-        logger.warning("Failed to build AI highlights prompt: %s", exc)
+        logger.warning("Failed to build AI highlights prompt for '%s': %s", project_name, exc)
         return None
 
     try:
@@ -65,7 +66,7 @@ def generate_highlights(
         logger.warning(
             "claude CLI exited with code %d — skipping AI highlights\nstderr: %s",
             result.returncode,
-            result.stderr.strip()[:500] or "(empty)",
+            _truncate_stderr(result.stderr),
         )
         return None
 
@@ -74,6 +75,16 @@ def generate_highlights(
         logger.warning("claude CLI returned empty output — skipping AI highlights")
         return None
     return output
+
+
+def _truncate_stderr(stderr: str, limit: int = 500) -> str:
+    """Truncate stderr for logging, indicating when content was cut."""
+    text = stderr.strip()
+    if not text:
+        return "(empty)"
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]} ... ({len(text) - limit} more chars)"
 
 
 def _has_meaningful_data(
