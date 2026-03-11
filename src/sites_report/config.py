@@ -27,6 +27,19 @@ class ConfigError(Exception):
     """Raised when configuration is invalid or cannot be loaded."""
 
 
+def default_config_path() -> Path:
+    """Return ``~/.sites-report/config.toml``."""
+    try:
+        home = Path.home()
+    except (RuntimeError, KeyError, OSError):
+        msg = (
+            "Cannot determine home directory. "
+            "Set HOME or use --config to specify a config path."
+        )
+        raise ConfigError(msg) from None
+    return home / ".sites-report" / "config.toml"
+
+
 @dataclass(frozen=True, slots=True)
 class EmailConfig:
     smtp_host: str
@@ -73,8 +86,27 @@ class Config:
     subscriptions: tuple[SubscriptionConfig, ...]
 
 
+def _resolve_path(base_dir: Path, raw: object, label: str) -> Path:
+    """Resolve a path relative to *base_dir* unless it is already absolute."""
+    if not isinstance(raw, str):
+        msg = f"Expected a string for {label}, got {type(raw).__name__}: {raw!r}"
+        raise ConfigError(msg)
+    cleaned = raw.strip()
+    if not cleaned:
+        msg = f"{label} must not be empty"
+        raise ConfigError(msg)
+    p = Path(cleaned)
+    if p.is_absolute():
+        return p
+    return base_dir / p
+
+
 def load_config(path: Path, *, resolve_env: bool = True) -> Config:
-    """Load and validate configuration from a TOML file."""
+    """Load and validate configuration from a TOML file.
+
+    Relative paths in the config (``db_path``, ``service_account_key``)
+    are resolved against the config file's parent directory.
+    """
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
@@ -85,16 +117,28 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
         raise ConfigError(msg) from exc
 
     try:
+        base_dir = path.resolve().parent
+    except OSError as exc:
+        msg = f"Cannot resolve config file path '{path}': {exc}"
+        raise ConfigError(msg) from exc
+
+    try:
         data = tomllib.loads(raw.decode())
     except tomllib.TOMLDecodeError as exc:
         msg = f"Malformed TOML: {exc}"
         raise ConfigError(msg) from None
 
     general = data.get("general", {})
-    db_path = Path(general.get("db_path", "data/sites-report.db"))
-    raw_log_level = general.get("log_level", "INFO").upper()
+    raw_db_path = general.get("db_path", "data/sites-report.db")
+    db_path = _resolve_path(base_dir, raw_db_path, "general.db_path")
+    raw_log_level = general.get("log_level", "INFO")
+    if not isinstance(raw_log_level, str):
+        valid = ", ".join(lv.value for lv in LogLevel)
+        got = type(raw_log_level).__name__
+        msg = f"general.log_level must be a string, got {got}. Valid values: {valid}"
+        raise ConfigError(msg)
     try:
-        log_level = LogLevel(raw_log_level)
+        log_level = LogLevel(raw_log_level.upper())
     except ValueError:
         valid = ", ".join(lv.value for lv in LogLevel)
         msg = f"Invalid log_level '{raw_log_level}', must be one of: {valid}"
@@ -105,7 +149,7 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
         raise ConfigError(msg)
     email = _parse_email(data["email"], resolve_env=resolve_env)
 
-    google = _parse_google(data["google"]) if "google" in data else None
+    google = _parse_google(data["google"], base_dir) if "google" in data else None
     vercel = _parse_vercel(data["vercel"], resolve_env=resolve_env) if "vercel" in data else None
 
     if "projects" not in data or len(data["projects"]) == 0:
@@ -156,10 +200,30 @@ def _resolve_env_var(env_var_name: str, field_label: str, *, resolve: bool) -> s
 
 
 def _parse_email(data: dict, *, resolve_env: bool) -> EmailConfig:
-    for key in ("smtp_host", "smtp_port", "smtp_user", "smtp_password_env", "from_address"):
+    for key in ("smtp_host", "smtp_port", "smtp_user", "from_address"):
         if key not in data:
             msg = f"Missing required email field: '{key}'"
             raise ConfigError(msg)
+
+    has_password = "smtp_password" in data
+    has_password_env = "smtp_password_env" in data
+    if not has_password and not has_password_env:
+        msg = "Missing required email field: 'smtp_password' or 'smtp_password_env'"
+        raise ConfigError(msg)
+    if has_password and has_password_env:
+        msg = "email: specify either 'smtp_password' or 'smtp_password_env', not both"
+        raise ConfigError(msg)
+
+    if has_password:
+        password = data["smtp_password"]
+        if not isinstance(password, str) or not password:
+            msg = "email.smtp_password must be a non-empty string"
+            raise ConfigError(msg)
+    else:
+        password = _resolve_env_var(
+            data["smtp_password_env"], "email.smtp_password", resolve=resolve_env
+        )
+
     port = data["smtp_port"]
     if not isinstance(port, int) or not (1 <= port <= 65535):
         msg = f"email.smtp_port must be an integer between 1 and 65535, got: {port!r}"
@@ -168,19 +232,20 @@ def _parse_email(data: dict, *, resolve_env: bool) -> EmailConfig:
         smtp_host=data["smtp_host"],
         smtp_port=port,
         smtp_user=data["smtp_user"],
-        smtp_password=_resolve_env_var(
-            data["smtp_password_env"], "email.smtp_password", resolve=resolve_env
-        ),
+        smtp_password=password,
         from_address=data["from_address"],
     )
 
 
-def _parse_google(data: dict) -> GoogleConfig:
+def _parse_google(data: dict, base_dir: Path) -> GoogleConfig:
     try:
-        return GoogleConfig(service_account_key=Path(data["service_account_key"]))
+        raw_key = data["service_account_key"]
     except KeyError as exc:
         msg = f"Missing required google field: {exc}"
         raise ConfigError(msg) from None
+    return GoogleConfig(
+        service_account_key=_resolve_path(base_dir, raw_key, "google.service_account_key"),
+    )
 
 
 def _parse_vercel(data: dict, *, resolve_env: bool) -> VercelConfig:

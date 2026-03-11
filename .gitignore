@@ -17,8 +17,13 @@ __pycache__/
 *.pyc
 *.egg-info/
 
-# Claude Code local settings
+# Claude Code
 .claude/settings.local.json
+.claude/worktrees/
+docs/CLAUDE.md
+
+# Environment
+.env
 
 # Testing
 .pytest_cache/

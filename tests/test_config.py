@@ -12,6 +12,7 @@ from sites_report.config import (
     Schedule,
     SubscriptionConfig,
     VercelConfig,
+    default_config_path,
     load_config,
 )
 
@@ -90,12 +91,12 @@ schedule = "daily"
     cfg = load_config(path)
 
     assert isinstance(cfg, Config)
-    assert cfg.db_path == Path("data/test.db")
+    assert cfg.db_path == tmp_path / "data/test.db"
     assert cfg.log_level == LogLevel.DEBUG
     assert isinstance(cfg.email, EmailConfig)
     assert cfg.email.smtp_password == "secret"
     assert isinstance(cfg.google, GoogleConfig)
-    assert cfg.google.service_account_key == Path("credentials/sa.json")
+    assert cfg.google.service_account_key == tmp_path / "credentials/sa.json"
     assert isinstance(cfg.vercel, VercelConfig)
     assert cfg.vercel.api_token == "tok_123"
     assert len(cfg.projects) == 1
@@ -153,8 +154,62 @@ def test_load_config_defaults_general_fields(tmp_path, monkeypatch):
     path = _write_toml_str(tmp_path, toml)
     cfg = load_config(path)
 
-    assert cfg.db_path == Path("data/sites-report.db")
+    assert cfg.db_path == tmp_path / "data/sites-report.db"
     assert cfg.log_level == LogLevel.INFO
+
+
+def test_load_config_preserves_absolute_db_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = '[general]\ndb_path = "/opt/data/report.db"\n\n' + _minimal_toml()
+    path = _write_toml_str(tmp_path, toml)
+    cfg = load_config(path)
+
+    assert cfg.db_path == Path("/opt/data/report.db")
+
+
+def test_load_config_rejects_non_string_db_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = '[general]\ndb_path = 42\n\n' + _minimal_toml()
+    path = _write_toml_str(tmp_path, toml)
+
+    with pytest.raises(ConfigError, match="Expected a string"):
+        load_config(path)
+
+
+def test_load_config_rejects_empty_db_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = '[general]\ndb_path = ""\n\n' + _minimal_toml()
+    path = _write_toml_str(tmp_path, toml)
+
+    with pytest.raises(ConfigError, match="must not be empty"):
+        load_config(path)
+
+
+def test_load_config_preserves_absolute_service_account_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = _minimal_toml().replace(
+        'service_account_key = "credentials/sa.json"',
+        'service_account_key = "/etc/gcloud/sa.json"',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    cfg = load_config(path)
+
+    assert cfg.google is not None
+    assert cfg.google.service_account_key == Path("/etc/gcloud/sa.json")
+
+
+def test_default_config_path_points_to_home_dir():
+    result = default_config_path()
+    assert result == Path.home() / ".sites-report" / "config.toml"
+
+
+def test_default_config_path_raises_when_home_unresolvable(monkeypatch):
+    def _no_home():
+        raise RuntimeError("no home")
+
+    monkeypatch.setattr(Path, "home", staticmethod(_no_home))
+    with pytest.raises(ConfigError, match="Cannot determine home directory"):
+        default_config_path()
 
 
 def test_load_config_resolves_env_vars(tmp_path, monkeypatch):
@@ -172,6 +227,44 @@ def test_load_config_with_resolve_env_false(tmp_path):
     cfg = load_config(path, resolve_env=False)
 
     assert cfg.email.smtp_password == "<SMTP_PASSWORD>"
+
+
+def test_load_config_with_inline_smtp_password(tmp_path):
+    toml = _minimal_toml().replace(
+        'smtp_password_env = "SMTP_PASSWORD"',
+        'smtp_password = "inline_secret"',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    cfg = load_config(path)
+
+    assert cfg.email.smtp_password == "inline_secret"
+
+
+def test_load_config_raises_on_both_smtp_password_fields(tmp_path):
+    toml = _minimal_toml().replace(
+        'smtp_password_env = "SMTP_PASSWORD"',
+        'smtp_password = "x"\nsmtp_password_env = "SMTP_PASSWORD"',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match=r"either.*not both"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_missing_smtp_password(tmp_path):
+    toml = _minimal_toml().replace('smtp_password_env = "SMTP_PASSWORD"\n', "")
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match=r"smtp_password.*smtp_password_env"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_empty_inline_smtp_password(tmp_path):
+    toml = _minimal_toml().replace(
+        'smtp_password_env = "SMTP_PASSWORD"',
+        'smtp_password = ""',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="non-empty string"):
+        load_config(path, resolve_env=False)
 
 
 # ── Validation errors ───────────────────────────────────────────────
@@ -372,6 +465,26 @@ def test_load_config_raises_on_missing_google_service_account_key(tmp_path):
     toml = _minimal_toml().replace('service_account_key = "credentials/sa.json"', "")
     path = _write_toml_str(tmp_path, toml)
     with pytest.raises(ConfigError, match="Missing required google field"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_whitespace_only_service_account_key(tmp_path):
+    toml = _minimal_toml().replace(
+        'service_account_key = "credentials/sa.json"',
+        'service_account_key = "   "',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="must not be empty"):
+        load_config(path, resolve_env=False)
+
+
+def test_load_config_raises_on_non_string_log_level(tmp_path):
+    toml = _minimal_toml().replace(
+        "[email]",
+        '[general]\nlog_level = 42\n\n[email]',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    with pytest.raises(ConfigError, match="log_level must be a string"):
         load_config(path, resolve_env=False)
 
 
