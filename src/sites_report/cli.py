@@ -421,6 +421,7 @@ def report(
 
     last_output_file: Path | None = None
     generated = 0
+    sent_failures = 0
 
     for idx, sub in enumerate(matching):
         sub_projects = tuple(p for p in cfg.projects if p.slug in sub.projects)
@@ -451,21 +452,28 @@ def report(
             click.echo(f"Written to: {out}")
             last_output_file = out
 
+        if not no_send:
+            from sites_report.email import EmailError, send_email
+
+            try:
+                send_email(cfg.email, sub.recipient, result.subject, result.html)
+            except EmailError as exc:
+                logger.error("Failed to send email to %s: %s", sub.recipient, exc)
+                click.echo(f"Error: failed to send to {sub.recipient}: {exc}", err=True)
+                sent_failures += 1
+                continue
+            click.echo(f"Sent to: {sub.recipient}")
+
     failed = len(matching) - generated
     if generated == 0 and failed > 0:
         click.echo("All subscriptions failed to generate.", err=True)
         raise SystemExit(1)
 
-    if not no_send:
+    if failed > 0 or sent_failures > 0:
+        total_failures = failed + sent_failures
         click.echo(
-            "Warning: email sending is not yet implemented. "
-            "Use --no-send --output <file> to save reports to disk.",
-            err=True,
+            f"{total_failures} of {len(matching)} subscription(s) failed.", err=True
         )
-        raise SystemExit(1)
-
-    if failed > 0:
-        click.echo(f"{failed} of {len(matching)} subscription(s) failed.", err=True)
         raise SystemExit(1)
 
     if preview and last_output_file is not None:

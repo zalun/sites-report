@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 from sites_report.cli import _default_report_date, cli
 from sites_report.config import Schedule
+from sites_report.email import EmailError
 from sites_report.reports.builder import Report
 
 MINIMAL_CONFIG = """\
@@ -326,9 +327,10 @@ def test_report_output_writes_file(
     assert out_file.read_text() == "<html>test</html>"
 
 
+@mock.patch("sites_report.email.send_email")
 @mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
 def test_report_output_implies_no_send(
-    mock_build, runner: CliRunner, report_config_path: Path, tmp_path: Path
+    mock_build, mock_send, runner: CliRunner, report_config_path: Path, tmp_path: Path
 ) -> None:
     out_file = tmp_path / "report.html"
     result = runner.invoke(
@@ -346,12 +348,64 @@ def test_report_output_implies_no_send(
         ],
     )
     assert result.exit_code == 0, result.output
-    assert "not implemented" not in result.output.lower()
+    assert mock_send.call_count == 0
 
 
+@mock.patch("sites_report.email.send_email")
 @mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
-def test_report_without_no_send_exits_with_warning(
-    mock_build, runner: CliRunner, report_config_path: Path
+def test_report_sends_email(
+    mock_build, mock_send, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 1
+    call_args = mock_send.call_args[0]
+    assert call_args[1] == "admin@test.com"
+    assert call_args[2] == _MOCK_REPORT.subject
+    assert call_args[3] == _MOCK_REPORT.html
+    assert "Sent to" in result.output
+
+
+@mock.patch("sites_report.email.send_email")
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_no_send_skips_email(
+    mock_build, mock_send, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 0
+
+
+@mock.patch(
+    "sites_report.email.send_email",
+    side_effect=EmailError("SMTP down"),
+)
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_send_email_error_logged(
+    mock_build, mock_send, runner: CliRunner, report_config_path: Path
 ) -> None:
     result = runner.invoke(
         cli,
@@ -366,8 +420,30 @@ def test_report_without_no_send_exits_with_warning(
         ],
     )
     assert result.exit_code == 1
-    assert "email sending is not yet implemented" in result.output.lower()
-    assert "--no-send" in result.output
+    assert "failed to send" in result.output.lower()
+
+
+@mock.patch("sites_report.email.send_email")
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_multiple_subscriptions_sends_all(
+    mock_build, mock_send, runner: CliRunner, two_sub_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(two_sub_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 2
+    recipients = {call[0][1] for call in mock_send.call_args_list}
+    assert recipients == {"admin@test.com", "boss@test.com"}
 
 
 def test_report_no_matching_subscriptions(runner: CliRunner, report_config_path: Path) -> None:
