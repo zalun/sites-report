@@ -88,16 +88,14 @@ class GA4Collector(Collector):
         pid = project.ga4_property_id
         if not pid.startswith("properties/"):
             if not pid.isdigit():
-                logger.warning(
-                    "ga4_property_id '%s' for project '%s' is not a bare numeric ID"
-                    " and does not start with 'properties/'",
-                    pid, project.slug,
+                raise CollectorError(
+                    f"ga4_property_id '{pid}' for project '{project.slug}' is invalid:"
+                    f" expected a numeric ID like '123456' or 'properties/123456'"
                 )
-            else:
-                logger.debug(
-                    "Prepending 'properties/' prefix to ga4_property_id '%s' for project '%s'",
-                    pid, project.slug,
-                )
+            logger.debug(
+                "Prepending 'properties/' prefix to ga4_property_id '%s' for project '%s'",
+                pid, project.slug,
+            )
             pid = f"properties/{pid}"
         return pid
 
