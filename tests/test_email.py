@@ -67,3 +67,15 @@ def test_send_email_connection_error(mock_smtp_cls: mock.MagicMock) -> None:
         send_email(_CFG, "alice@example.com", "Report", "<p>hi</p>")
 
     assert isinstance(exc_info.value.__cause__, OSError)
+
+
+def test_send_email_construction_error() -> None:
+    match = r"Failed to construct email for alice@example\.com"
+    with pytest.raises(EmailError, match=match) as exc_info:
+        send_email(_CFG, "alice@example.com", "Report", None)  # type: ignore[arg-type]
+
+    assert isinstance(exc_info.value.__cause__, (TypeError, AttributeError))
+
+
+def test_email_config_repr_hides_password() -> None:
+    assert "secret" not in repr(_CFG)

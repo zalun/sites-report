@@ -420,7 +420,12 @@ def report(
         return
 
     if not no_send:
-        from sites_report.email import EmailError, send_email
+        try:
+            from sites_report.email import EmailError, send_email
+        except ImportError as exc:
+            logger.error("Email sending dependencies not available: %s", exc)
+            click.echo(f"Email sender unavailable (missing dependency): {exc}", err=True)
+            raise SystemExit(1) from exc
 
     last_output_file: Path | None = None
     generated = 0
