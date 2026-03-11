@@ -133,6 +133,40 @@ def test_verbose_flag_accepted(runner: CliRunner, config_path: Path) -> None:
     assert result.exit_code == 0, result.output
 
 
+# --- shared config templates ---
+
+MULTI_PROJECT_CONFIG = """\
+[general]
+db_path = "{db_path}"
+
+[email]
+smtp_host = "smtp.test.com"
+smtp_port = 587
+smtp_user = "test@test.com"
+smtp_password_env = "TEST_SMTP_PASS"
+from_address = "test@test.com"
+
+[google]
+service_account_key = "credentials/sa.json"
+
+[[projects]]
+name = "Site A"
+slug = "site-a"
+ga4_property_id = "properties/111"
+gsc_site_url = "https://site-a.com"
+
+[[projects]]
+name = "Site B"
+slug = "site-b"
+ga4_property_id = "properties/222"
+
+[[subscriptions]]
+recipient = "admin@test.com"
+projects = ["site-a", "site-b"]
+schedule = "daily"
+"""
+
+
 # --- report command ---
 
 _MOCK_REPORT = Report(subject="Test Report", html="<html>test</html>")
@@ -353,6 +387,30 @@ def test_report_build_error_logged(
     assert "all subscriptions failed" in result.output.lower()
 
 
+@mock.patch(
+    "sites_report.reports.builder.build_report",
+    side_effect=RuntimeError("template rendering crashed"),
+)
+def test_report_unexpected_error_logged(
+    mock_build, runner: CliRunner, report_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(report_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--no-send",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "failed to build report" in result.output.lower()
+
+
 @mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
 def test_report_multiple_subscriptions(
     mock_build, runner: CliRunner, two_sub_config_path: Path
@@ -376,9 +434,8 @@ def test_report_multiple_subscriptions(
     assert "boss@test.com" in result.output
 
 
-@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
-def test_report_preview_without_output_warns(
-    mock_build, runner: CliRunner, report_config_path: Path
+def test_report_preview_without_output_rejected(
+    runner: CliRunner, report_config_path: Path
 ) -> None:
     result = runner.invoke(
         cli,
@@ -394,7 +451,7 @@ def test_report_preview_without_output_warns(
             "2025-03-01",
         ],
     )
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1
     assert "--preview requires --output" in result.output
 
 
@@ -462,38 +519,6 @@ def test_default_report_date_monthly_jan_first() -> None:
 
 
 # --- fetch command ---
-
-
-MULTI_PROJECT_CONFIG = """\
-[general]
-db_path = "{db_path}"
-
-[email]
-smtp_host = "smtp.test.com"
-smtp_port = 587
-smtp_user = "test@test.com"
-smtp_password_env = "TEST_SMTP_PASS"
-from_address = "test@test.com"
-
-[google]
-service_account_key = "credentials/sa.json"
-
-[[projects]]
-name = "Site A"
-slug = "site-a"
-ga4_property_id = "properties/111"
-gsc_site_url = "https://site-a.com"
-
-[[projects]]
-name = "Site B"
-slug = "site-b"
-ga4_property_id = "properties/222"
-
-[[subscriptions]]
-recipient = "admin@test.com"
-projects = ["site-a", "site-b"]
-schedule = "daily"
-"""
 
 
 @pytest.fixture

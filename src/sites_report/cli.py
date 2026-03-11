@@ -384,6 +384,10 @@ def report(
     if output_path is not None:
         no_send = True
 
+    if preview and output_path is None:
+        click.echo("--preview requires --output to specify a file path.", err=True)
+        raise SystemExit(1)
+
     if date_str is not None:
         try:
             report_date = datetime.date.fromisoformat(date_str)
@@ -445,7 +449,5 @@ def report(
     if preview and last_output_file is not None:
         try:
             webbrowser.open(last_output_file.as_uri())
-        except webbrowser.Error as exc:
+        except (webbrowser.Error, OSError) as exc:
             click.echo(f"Could not open browser: {exc}. View: {last_output_file}", err=True)
-    elif preview:
-        click.echo("--preview requires --output to specify a file path.", err=True)
