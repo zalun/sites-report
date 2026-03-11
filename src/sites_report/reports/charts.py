@@ -44,8 +44,13 @@ def sessions_users_trend(data: list[dict]) -> bytes | None:
     """Dual-line chart: sessions and users over time.
 
     Expects dicts with keys: date, sessions, users.
+    Returns ``None`` when there is no data or all values are zero.
     """
     if not data:
+        return None
+
+    if all(d.get("sessions", 0) == 0 and d.get("users", 0) == 0 for d in data):
+        logger.debug("sessions_users_trend: skipping chart, all values are zero")
         return None
 
     fig, ax = plt.subplots(figsize=(_FIG_WIDTH, _FIG_HEIGHT))
@@ -72,8 +77,13 @@ def gsc_clicks_impressions_trend(data: list[dict]) -> bytes | None:
     """Dual-axis chart: clicks (left) and impressions (right) over time.
 
     Expects dicts with keys: date, clicks, impressions.
+    Returns ``None`` when there is no data or all values are zero.
     """
     if not data:
+        return None
+
+    if all(d.get("clicks", 0) == 0 and d.get("impressions", 0) == 0 for d in data):
+        logger.debug("gsc_clicks_impressions_trend: skipping chart, all values are zero")
         return None
 
     fig, ax1 = plt.subplots(figsize=(_FIG_WIDTH, _FIG_HEIGHT))
@@ -121,12 +131,17 @@ def top_search_queries(data: list[dict], *, limit: int = 10) -> bytes | None:
     """Horizontal bar chart of top search queries by clicks.
 
     Expects dicts with keys: query, clicks.
+    Returns ``None`` when there are no entries or all clicks are zero.
     """
     if not data:
         return None
 
     entries = data[:limit]
     if not entries:
+        return None
+
+    if all(d.get("clicks", 0) == 0 for d in entries):
+        logger.debug("top_search_queries: skipping chart, all clicks are zero")
         return None
 
     fig, ax = plt.subplots(figsize=(_FIG_WIDTH, _FIG_HEIGHT))
@@ -151,12 +166,17 @@ def top_pages(data: list[dict], *, limit: int = 10) -> bytes | None:
     """Horizontal bar chart of top pages by pageviews.
 
     Expects dicts with keys: page_path, pageviews.
+    Returns ``None`` when there are no entries or all pageviews are zero.
     """
     if not data:
         return None
 
     entries = data[:limit]
     if not entries:
+        return None
+
+    if all(d.get("pageviews", 0) == 0 for d in entries):
+        logger.debug("top_pages: skipping chart, all pageviews are zero")
         return None
 
     fig, ax = plt.subplots(figsize=(_FIG_WIDTH, _FIG_HEIGHT))

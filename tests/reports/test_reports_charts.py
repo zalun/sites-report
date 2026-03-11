@@ -97,3 +97,55 @@ def test_sessions_users_trend_returns_none_on_bad_type():
     result = sessions_users_trend(data)
 
     assert result is None
+
+
+def test_sessions_users_trend_returns_none_for_all_zeros():
+    data = [
+        {"date": "2025-03-01", "sessions": 0, "users": 0},
+        {"date": "2025-03-02", "sessions": 0, "users": 0},
+    ]
+    assert sessions_users_trend(data) is None
+
+
+def test_gsc_clicks_impressions_trend_returns_none_for_all_zeros():
+    data = [
+        {"date": "2025-03-01", "clicks": 0, "impressions": 0},
+        {"date": "2025-03-02", "clicks": 0, "impressions": 0},
+    ]
+    assert gsc_clicks_impressions_trend(data) is None
+
+
+def test_top_search_queries_returns_none_for_all_zero_clicks():
+    data = [
+        {"query": "foo", "clicks": 0},
+        {"query": "bar", "clicks": 0},
+    ]
+    assert top_search_queries(data) is None
+
+
+def test_top_pages_returns_none_for_all_zero_pageviews():
+    data = [
+        {"page_path": "/a", "pageviews": 0},
+        {"page_path": "/b", "pageviews": 0},
+    ]
+    assert top_pages(data) is None
+
+
+def test_sessions_users_trend_renders_for_mixed_zero_nonzero():
+    data = [
+        {"date": "2025-03-01", "sessions": 0, "users": 0},
+        {"date": "2025-03-02", "sessions": 5, "users": 3},
+    ]
+    result = sessions_users_trend(data)
+    assert result is not None
+    assert result[:4] == _PNG_MAGIC
+
+
+def test_top_search_queries_renders_for_mixed_zero_nonzero():
+    data = [
+        {"query": "foo", "clicks": 0},
+        {"query": "bar", "clicks": 5},
+    ]
+    result = top_search_queries(data)
+    assert result is not None
+    assert result[:4] == _PNG_MAGIC
