@@ -19,9 +19,10 @@ Daily/weekly/monthly site analytics reports from GA4, GSC, and Vercel — delive
 - `src/sites_report/cli.py` — Click commands entry point
 - `src/sites_report/collectors/` — data source collectors (GA4, GSC, Vercel)
 - `src/sites_report/reports/` — report builder, charts, templates
-- `config.toml` — runtime configuration (gitignored)
-- `credentials/` — Google service account keys (gitignored)
-- `data/` — SQLite database (gitignored)
+- `~/.sites-report/` — runtime data directory (config, DB, credentials)
+  - `config.toml` — TOML configuration
+  - `data/sites-report.db` — SQLite database
+  - `credentials/` — Google service account keys
 - `docs/PLAN.md` — full system plan
 - `docs/IDEAS.md` — future ideas
 
@@ -48,8 +49,8 @@ just test-cov # pytest with coverage
 ## Conventions
 
 - All docs and code in English
-- Config in TOML (`config.toml`)
+- Config in TOML (`~/.sites-report/config.toml`), override with `--config`
 - Secrets via environment variables, never in files
 - Data always fetched daily; reporting frequency per subscription
-- Charts as base64 PNG embedded in HTML emails
+- Charts as CID-embedded PNG in emails, base64 in `--output` HTML
 - Full style guide: `docs/STYLE.md`

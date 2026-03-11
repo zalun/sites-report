@@ -90,12 +90,12 @@ schedule = "daily"
     cfg = load_config(path)
 
     assert isinstance(cfg, Config)
-    assert cfg.db_path == Path("data/test.db")
+    assert cfg.db_path == tmp_path / "data/test.db"
     assert cfg.log_level == LogLevel.DEBUG
     assert isinstance(cfg.email, EmailConfig)
     assert cfg.email.smtp_password == "secret"
     assert isinstance(cfg.google, GoogleConfig)
-    assert cfg.google.service_account_key == Path("credentials/sa.json")
+    assert cfg.google.service_account_key == tmp_path / "credentials/sa.json"
     assert isinstance(cfg.vercel, VercelConfig)
     assert cfg.vercel.api_token == "tok_123"
     assert len(cfg.projects) == 1
@@ -153,8 +153,26 @@ def test_load_config_defaults_general_fields(tmp_path, monkeypatch):
     path = _write_toml_str(tmp_path, toml)
     cfg = load_config(path)
 
-    assert cfg.db_path == Path("data/sites-report.db")
+    assert cfg.db_path == tmp_path / "data/sites-report.db"
     assert cfg.log_level == LogLevel.INFO
+
+
+def test_load_config_preserves_absolute_db_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = '[general]\ndb_path = "/opt/data/report.db"\n\n' + _minimal_toml()
+    path = _write_toml_str(tmp_path, toml)
+    cfg = load_config(path)
+
+    assert cfg.db_path == Path("/opt/data/report.db")
+
+
+def test_load_config_rejects_non_string_db_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = '[general]\ndb_path = 42\n\n' + _minimal_toml()
+    path = _write_toml_str(tmp_path, toml)
+
+    with pytest.raises(ConfigError, match="Expected a string"):
+        load_config(path)
 
 
 def test_load_config_resolves_env_vars(tmp_path, monkeypatch):

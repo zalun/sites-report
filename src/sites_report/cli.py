@@ -13,7 +13,14 @@ from typing import Any
 import click
 
 from sites_report.collectors.base import CollectorError
-from sites_report.config import Config, ConfigError, ProjectConfig, Schedule, load_config
+from sites_report.config import (
+    Config,
+    ConfigError,
+    ProjectConfig,
+    Schedule,
+    default_config_path,
+    load_config,
+)
 from sites_report.db import (
     DatabaseError,
     get_db_status,
@@ -54,16 +61,16 @@ def _load_config(ctx: click.Context) -> Config:
 @click.option(
     "--config",
     "config_path",
-    default="config.toml",
+    default=None,
     type=click.Path(exists=False),
-    help="Path to TOML configuration file.",
+    help="Path to TOML configuration file (default: ~/.sites-report/config.toml).",
 )
 @click.option("--verbose", is_flag=True, help="Enable DEBUG logging.")
 @click.pass_context
-def cli(ctx: click.Context, config_path: str, *, verbose: bool) -> None:
+def cli(ctx: click.Context, config_path: str | None, *, verbose: bool) -> None:
     """Sites Report — site analytics reports from GA4, GSC, and Vercel."""
     ctx.ensure_object(dict)
-    ctx.obj["config_path"] = Path(config_path)
+    ctx.obj["config_path"] = Path(config_path) if config_path else default_config_path()
     ctx.obj["verbose"] = verbose
     # Initial logging so errors during config loading are captured;
     # _load_config reconfigures with the config-file level via force=True.

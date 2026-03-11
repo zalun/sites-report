@@ -27,6 +27,11 @@ class ConfigError(Exception):
     """Raised when configuration is invalid or cannot be loaded."""
 
 
+def default_config_path() -> Path:
+    """Return ``~/.sites-report/config.toml``."""
+    return Path.home() / ".sites-report" / "config.toml"
+
+
 @dataclass(frozen=True, slots=True)
 class EmailConfig:
     smtp_host: str
@@ -73,10 +78,26 @@ class Config:
     subscriptions: tuple[SubscriptionConfig, ...]
 
 
+def _resolve_path(base_dir: Path, raw: object, label: str) -> Path:
+    """Resolve a path relative to *base_dir* unless it is already absolute."""
+    if not isinstance(raw, str):
+        msg = f"Expected a string for {label}, got {type(raw).__name__}: {raw!r}"
+        raise ConfigError(msg)
+    p = Path(raw)
+    if p.is_absolute():
+        return p
+    return base_dir / p
+
+
 def load_config(path: Path, *, resolve_env: bool = True) -> Config:
-    """Load and validate configuration from a TOML file."""
+    """Load and validate configuration from a TOML file.
+
+    Relative paths in the config (``db_path``, ``service_account_key``)
+    are resolved against the config file's parent directory.
+    """
     try:
         raw = path.read_bytes()
+        base_dir = path.resolve().parent
     except FileNotFoundError:
         msg = f"Config file not found: {path}"
         raise ConfigError(msg) from None
@@ -91,7 +112,8 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
         raise ConfigError(msg) from None
 
     general = data.get("general", {})
-    db_path = Path(general.get("db_path", "data/sites-report.db"))
+    raw_db_path = general.get("db_path", "data/sites-report.db")
+    db_path = _resolve_path(base_dir, raw_db_path, "general.db_path")
     raw_log_level = general.get("log_level", "INFO").upper()
     try:
         log_level = LogLevel(raw_log_level)
@@ -105,7 +127,7 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
         raise ConfigError(msg)
     email = _parse_email(data["email"], resolve_env=resolve_env)
 
-    google = _parse_google(data["google"]) if "google" in data else None
+    google = _parse_google(data["google"], base_dir) if "google" in data else None
     vercel = _parse_vercel(data["vercel"], resolve_env=resolve_env) if "vercel" in data else None
 
     if "projects" not in data or len(data["projects"]) == 0:
@@ -175,9 +197,13 @@ def _parse_email(data: dict, *, resolve_env: bool) -> EmailConfig:
     )
 
 
-def _parse_google(data: dict) -> GoogleConfig:
+def _parse_google(data: dict, base_dir: Path) -> GoogleConfig:
     try:
-        return GoogleConfig(service_account_key=Path(data["service_account_key"]))
+        return GoogleConfig(
+            service_account_key=_resolve_path(
+                base_dir, data["service_account_key"], "google.service_account_key"
+            ),
+        )
     except KeyError as exc:
         msg = f"Missing required google field: {exc}"
         raise ConfigError(msg) from None
