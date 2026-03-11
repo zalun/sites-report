@@ -31,7 +31,7 @@ def default_config_path() -> Path:
     """Return ``~/.sites-report/config.toml``."""
     try:
         home = Path.home()
-    except (RuntimeError, KeyError):
+    except (RuntimeError, KeyError, OSError):
         msg = (
             "Cannot determine home directory. "
             "Set HOME or use --config to specify a config path."
@@ -109,12 +109,17 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
     """
     try:
         raw = path.read_bytes()
-        base_dir = path.resolve().parent
     except FileNotFoundError:
         msg = f"Config file not found: {path}"
         raise ConfigError(msg) from None
     except OSError as exc:
         msg = f"Cannot read config file '{path}': {exc}"
+        raise ConfigError(msg) from exc
+
+    try:
+        base_dir = path.resolve().parent
+    except OSError as exc:
+        msg = f"Cannot resolve config file path '{path}': {exc}"
         raise ConfigError(msg) from exc
 
     try:
