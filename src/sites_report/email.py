@@ -26,12 +26,12 @@ def send_email(cfg: EmailConfig, to: str, subject: str, html: str) -> None:
 
     Raises :class:`EmailError` on any SMTP or connection failure.
     """
-    msg = MIMEText(html, "html")
-    msg["Subject"] = subject
-    msg["From"] = cfg.from_address
-    msg["To"] = to
-
     try:
+        msg = MIMEText(html, "html")
+        msg["Subject"] = subject
+        msg["From"] = cfg.from_address
+        msg["To"] = to
+
         with smtplib.SMTP(cfg.smtp_host, cfg.smtp_port, timeout=30) as smtp:
             smtp.starttls()
             smtp.login(cfg.smtp_user, cfg.smtp_password)
@@ -40,3 +40,6 @@ def send_email(cfg: EmailConfig, to: str, subject: str, html: str) -> None:
     except (smtplib.SMTPException, OSError) as exc:
         logger.error("Failed to send email to %s: %s", to, exc)
         raise EmailError(f"Failed to send email to {to}: {exc}") from exc
+    except Exception as exc:
+        logger.error("Failed to construct email for %s: %s", to, exc)
+        raise EmailError(f"Failed to construct email for {to}: {exc}") from exc

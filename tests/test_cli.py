@@ -351,6 +351,9 @@ def test_report_output_implies_no_send(
     assert mock_send.call_count == 0
 
 
+# Note: send_email is patched at its definition site (sites_report.email) because
+# the report command uses a deferred conditional import inside the function body.
+
 @mock.patch("sites_report.email.send_email")
 @mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
 def test_report_sends_email(
@@ -444,6 +447,33 @@ def test_report_multiple_subscriptions_sends_all(
     assert mock_send.call_count == 2
     recipients = {call[0][1] for call in mock_send.call_args_list}
     assert recipients == {"admin@test.com", "boss@test.com"}
+
+
+@mock.patch(
+    "sites_report.email.send_email",
+    side_effect=[None, EmailError("SMTP down")],
+)
+@mock.patch("sites_report.reports.builder.build_report", return_value=_MOCK_REPORT)
+def test_report_partial_send_failure(
+    mock_build, mock_send, runner: CliRunner, two_sub_config_path: Path
+) -> None:
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(two_sub_config_path),
+            "report",
+            "--schedule",
+            "daily",
+            "--date",
+            "2025-03-01",
+        ],
+    )
+    assert result.exit_code == 1
+    assert mock_send.call_count == 2
+    assert "Sent to" in result.output
+    assert "failed to send" in result.output.lower()
+    assert "1 of 2 subscription(s) failed" in result.output.lower()
 
 
 def test_report_no_matching_subscriptions(runner: CliRunner, report_config_path: Path) -> None:

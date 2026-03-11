@@ -419,6 +419,9 @@ def report(
         click.echo(f"No subscriptions matching schedule '{schedule}'.")
         return
 
+    if not no_send:
+        from sites_report.email import EmailError, send_email
+
     last_output_file: Path | None = None
     generated = 0
     sent_failures = 0
@@ -453,8 +456,6 @@ def report(
             last_output_file = out
 
         if not no_send:
-            from sites_report.email import EmailError, send_email
-
             try:
                 send_email(cfg.email, sub.recipient, result.subject, result.html)
             except EmailError as exc:

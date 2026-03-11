@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
@@ -32,7 +32,7 @@ class EmailConfig:
     smtp_host: str
     smtp_port: int
     smtp_user: str
-    smtp_password: str
+    smtp_password: str = field(repr=False)
     from_address: str
 
 
