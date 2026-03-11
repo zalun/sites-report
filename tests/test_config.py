@@ -203,6 +203,15 @@ def test_default_config_path_points_to_home_dir():
     assert result == Path.home() / ".sites-report" / "config.toml"
 
 
+def test_default_config_path_raises_when_home_unresolvable(monkeypatch):
+    def _no_home():
+        raise RuntimeError("no home")
+
+    monkeypatch.setattr(Path, "home", staticmethod(_no_home))
+    with pytest.raises(ConfigError, match="Cannot determine home directory"):
+        default_config_path()
+
+
 def test_load_config_resolves_env_vars(tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "my_smtp_pass")
     toml = _minimal_toml()

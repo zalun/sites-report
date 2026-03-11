@@ -91,10 +91,11 @@ def _resolve_path(base_dir: Path, raw: object, label: str) -> Path:
     if not isinstance(raw, str):
         msg = f"Expected a string for {label}, got {type(raw).__name__}: {raw!r}"
         raise ConfigError(msg)
-    if not raw.strip():
+    cleaned = raw.strip()
+    if not cleaned:
         msg = f"{label} must not be empty"
         raise ConfigError(msg)
-    p = Path(raw)
+    p = Path(cleaned)
     if p.is_absolute():
         return p
     return base_dir / p

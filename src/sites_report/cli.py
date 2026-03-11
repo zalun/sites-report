@@ -70,7 +70,14 @@ def _load_config(ctx: click.Context) -> Config:
 def cli(ctx: click.Context, config_path: str | None, *, verbose: bool) -> None:
     """Sites Report — site analytics reports from GA4, GSC, and Vercel."""
     ctx.ensure_object(dict)
-    ctx.obj["config_path"] = Path(config_path) if config_path else default_config_path()
+    if config_path:
+        ctx.obj["config_path"] = Path(config_path)
+    else:
+        try:
+            ctx.obj["config_path"] = default_config_path()
+        except ConfigError as exc:
+            click.echo(f"Configuration error: {exc}", err=True)
+            raise SystemExit(1) from exc
     ctx.obj["verbose"] = verbose
     # Initial logging so errors during config loading are captured;
     # _load_config reconfigures with the config-file level via force=True.
