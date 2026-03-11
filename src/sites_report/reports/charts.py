@@ -62,6 +62,7 @@ def sessions_users_trend(data: list[dict]) -> bytes | None:
         ax.plot(dates, sessions, color=_COLOR_PRIMARY, marker="o", markersize=4, label="Sessions")
         ax.plot(dates, users, color=_COLOR_SECONDARY, marker="o", markersize=4, label="Users")
         ax.set_title("Sessions & Users")
+        ax.set_ylim(bottom=0)
         ax.legend()
         _style_axes(ax)
         fig.autofmt_xdate()
@@ -94,6 +95,7 @@ def gsc_clicks_impressions_trend(data: list[dict]) -> bytes | None:
 
         ax1.plot(dates, clicks, color=_COLOR_PRIMARY, marker="o", markersize=4, label="Clicks")
         ax1.set_ylabel("Clicks", color=_COLOR_PRIMARY)
+        ax1.set_ylim(bottom=0)
         ax1.tick_params(axis="y", labelcolor=_COLOR_PRIMARY)
         _style_axes(ax1)
 
@@ -107,6 +109,7 @@ def gsc_clicks_impressions_trend(data: list[dict]) -> bytes | None:
             label="Impressions",
         )
         ax2.set_ylabel("Impressions", color=_COLOR_SECONDARY)
+        ax2.set_ylim(bottom=0)
         ax2.tick_params(axis="y", labelcolor=_COLOR_SECONDARY)
         ax2.spines["top"].set_visible(False)
 
