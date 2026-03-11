@@ -16,12 +16,15 @@ class EmailError(Exception):
 
 
 def send_email(cfg: EmailConfig, to: str, subject: str, html: str) -> None:
-    """Send an HTML email via SMTP with STARTTLS.
+    """Send an HTML email via SMTP with STARTTLS (port 587).
+
+    Assumes the server supports STARTTLS. Does not support implicit
+    TLS on port 465 (``SMTP_SSL``) or plain SMTP on port 25.
 
     Images are expected to be base64-encoded inline in *html*,
     so a simple ``MIMEText`` message is sufficient (no multipart).
 
-    Raises :class:`EmailError` on any SMTP failure.
+    Raises :class:`EmailError` on any SMTP or connection failure.
     """
     msg = MIMEText(html, "html")
     msg["Subject"] = subject
