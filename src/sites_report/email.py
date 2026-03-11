@@ -33,7 +33,7 @@ def _extract_inline_images(html: str) -> tuple[str, list[tuple[str, bytes]]]:
         cid = f"chart-{uuid.uuid4().hex[:12]}@sites-report"
         try:
             png_bytes = base64.b64decode(match.group(1))
-        except Exception:
+        except ValueError:
             logger.error("Failed to decode base64 image (CID %s)", cid)
             raise
         images.append((cid, png_bytes))
