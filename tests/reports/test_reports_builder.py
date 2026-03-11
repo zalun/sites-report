@@ -151,6 +151,14 @@ def test_format_change_na():
     assert _format_change(None) == "N/A"
 
 
+def test_format_change_nan():
+    assert _format_change(float("nan")) == "N/A"
+
+
+def test_format_change_inf():
+    assert _format_change(float("inf")) == "N/A"
+
+
 # ── Comparison ────────────────────────────────────────────────────
 
 

@@ -180,7 +180,7 @@ def _format_value(
 
 def _format_change(pct_change: float | None) -> str:
     """Format percentage change for display."""
-    if pct_change is None:
+    if pct_change is None or math.isnan(pct_change) or math.isinf(pct_change):
         return "N/A"
     if pct_change > 0:
         return f"+{pct_change:.1f}%"
@@ -216,7 +216,7 @@ def _compare_metric(
 
 def _encode_chart(png_bytes: bytes | None) -> str | None:
     """Base64-encode PNG bytes for embedding in HTML."""
-    if png_bytes is None:
+    if not png_bytes:
         return None
     return base64.b64encode(png_bytes).decode("ascii")
 
