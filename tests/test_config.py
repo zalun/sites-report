@@ -12,6 +12,7 @@ from sites_report.config import (
     Schedule,
     SubscriptionConfig,
     VercelConfig,
+    default_config_path,
     load_config,
 )
 
@@ -173,6 +174,33 @@ def test_load_config_rejects_non_string_db_path(tmp_path, monkeypatch):
 
     with pytest.raises(ConfigError, match="Expected a string"):
         load_config(path)
+
+
+def test_load_config_rejects_empty_db_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = '[general]\ndb_path = ""\n\n' + _minimal_toml()
+    path = _write_toml_str(tmp_path, toml)
+
+    with pytest.raises(ConfigError, match="must not be empty"):
+        load_config(path)
+
+
+def test_load_config_preserves_absolute_service_account_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    toml = _minimal_toml().replace(
+        'service_account_key = "credentials/sa.json"',
+        'service_account_key = "/etc/gcloud/sa.json"',
+    )
+    path = _write_toml_str(tmp_path, toml)
+    cfg = load_config(path)
+
+    assert cfg.google is not None
+    assert cfg.google.service_account_key == Path("/etc/gcloud/sa.json")
+
+
+def test_default_config_path_points_to_home_dir():
+    result = default_config_path()
+    assert result == Path.home() / ".sites-report" / "config.toml"
 
 
 def test_load_config_resolves_env_vars(tmp_path, monkeypatch):

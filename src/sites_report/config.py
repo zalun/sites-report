@@ -29,7 +29,15 @@ class ConfigError(Exception):
 
 def default_config_path() -> Path:
     """Return ``~/.sites-report/config.toml``."""
-    return Path.home() / ".sites-report" / "config.toml"
+    try:
+        home = Path.home()
+    except RuntimeError:
+        msg = (
+            "Cannot determine home directory. "
+            "Set HOME or use --config to specify a config path."
+        )
+        raise ConfigError(msg) from None
+    return home / ".sites-report" / "config.toml"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +90,9 @@ def _resolve_path(base_dir: Path, raw: object, label: str) -> Path:
     """Resolve a path relative to *base_dir* unless it is already absolute."""
     if not isinstance(raw, str):
         msg = f"Expected a string for {label}, got {type(raw).__name__}: {raw!r}"
+        raise ConfigError(msg)
+    if not raw.strip():
+        msg = f"{label} must not be empty"
         raise ConfigError(msg)
     p = Path(raw)
     if p.is_absolute():
