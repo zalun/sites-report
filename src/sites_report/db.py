@@ -231,9 +231,7 @@ def get_db_status(db_path: Path) -> DbStatus:
     conn = _connect(db_path)
 
     try:
-        row = conn.execute(
-            "SELECT MAX(version) FROM schema_version"
-        ).fetchone()
+        row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
         if row is None or row[0] is None:
             msg = f"Database '{db_path}' has no schema version — may be uninitialized or corrupt"
             logger.error(msg)
@@ -294,19 +292,42 @@ def get_db_status(db_path: Path) -> DbStatus:
 
 # ── Insert helpers ────────────────────────────────────────────────
 
-_GA_DAILY_KEYS = frozenset({
-    "sessions", "users", "new_users", "pageviews",
-    "avg_session_duration", "bounce_rate", "conversions",
-})
-_GSC_DAILY_KEYS = frozenset({
-    "clicks", "impressions", "ctr", "avg_position",
-})
-_GA_TOP_PAGES_KEYS = frozenset({
-    "page_path", "pageviews", "sessions", "avg_time_on_page",
-})
-_GSC_TOP_QUERIES_KEYS = frozenset({
-    "query", "clicks", "impressions", "ctr", "position",
-})
+_GA_DAILY_KEYS = frozenset(
+    {
+        "sessions",
+        "users",
+        "new_users",
+        "pageviews",
+        "avg_session_duration",
+        "bounce_rate",
+        "conversions",
+    }
+)
+_GSC_DAILY_KEYS = frozenset(
+    {
+        "clicks",
+        "impressions",
+        "ctr",
+        "avg_position",
+    }
+)
+_GA_TOP_PAGES_KEYS = frozenset(
+    {
+        "page_path",
+        "pageviews",
+        "sessions",
+        "avg_time_on_page",
+    }
+)
+_GSC_TOP_QUERIES_KEYS = frozenset(
+    {
+        "query",
+        "clicks",
+        "impressions",
+        "ctr",
+        "position",
+    }
+)
 
 
 def _check_keys(
@@ -320,13 +341,19 @@ def _check_keys(
     if unknown:
         logger.warning(
             "Unknown keys in %s data for '%s' on %s: %s",
-            table, project_slug, date, unknown,
+            table,
+            project_slug,
+            date,
+            unknown,
         )
     missing = expected - data_keys
     if missing:
         logger.warning(
             "Missing keys in %s data for '%s' on %s: %s",
-            table, project_slug, date, missing,
+            table,
+            project_slug,
+            date,
+            missing,
         )
 
 
@@ -477,3 +504,84 @@ def insert_gsc_top_queries(
         raise DatabaseError(msg) from exc
     finally:
         conn.close()
+
+
+# ── Query helpers ──────────────────────────────────────────────────
+
+
+def _query_rows(db_path: Path, sql: str, params: tuple) -> list[dict]:
+    """Execute a query and return results as list of dicts."""
+    if not db_path.exists():
+        msg = f"Database file not found: {db_path}"
+        logger.error(msg)
+        raise DatabaseError(msg)
+    conn = _connect(db_path)
+    try:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.Error as exc:
+        msg = f"Query failed: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
+    finally:
+        conn.close()
+
+
+def get_ga_daily(db_path: Path, slug: str, start_date: str, end_date: str) -> list[dict]:
+    """Return GA4 daily metrics for a project in date range."""
+    return _query_rows(
+        db_path,
+        """SELECT date, sessions, users, new_users, pageviews,
+                  avg_session_duration, bounce_rate, conversions
+           FROM ga_daily
+           WHERE project_slug = ? AND date >= ? AND date <= ?
+           ORDER BY date""",
+        (slug, start_date, end_date),
+    )
+
+
+def get_gsc_daily(db_path: Path, slug: str, start_date: str, end_date: str) -> list[dict]:
+    """Return GSC daily metrics for a project in date range."""
+    return _query_rows(
+        db_path,
+        """SELECT date, clicks, impressions, ctr, avg_position
+           FROM gsc_daily
+           WHERE project_slug = ? AND date >= ? AND date <= ?
+           ORDER BY date""",
+        (slug, start_date, end_date),
+    )
+
+
+def get_top_pages(
+    db_path: Path, slug: str, start_date: str, end_date: str, *, limit: int = 10
+) -> list[dict]:
+    """Return top pages by pageviews, aggregated across date range."""
+    return _query_rows(
+        db_path,
+        """SELECT page_path, SUM(pageviews) AS pageviews, SUM(sessions) AS sessions,
+                  AVG(avg_time_on_page) AS avg_time_on_page
+           FROM ga_top_pages
+           WHERE project_slug = ? AND date >= ? AND date <= ?
+           GROUP BY page_path
+           ORDER BY pageviews DESC
+           LIMIT ?""",
+        (slug, start_date, end_date, limit),
+    )
+
+
+def get_top_queries(
+    db_path: Path, slug: str, start_date: str, end_date: str, *, limit: int = 20
+) -> list[dict]:
+    """Return top search queries by clicks, aggregated across date range."""
+    return _query_rows(
+        db_path,
+        """SELECT query, SUM(clicks) AS clicks, SUM(impressions) AS impressions,
+                  AVG(ctr) AS ctr, AVG(position) AS position
+           FROM gsc_top_queries
+           WHERE project_slug = ? AND date >= ? AND date <= ?
+           GROUP BY query
+           ORDER BY clicks DESC
+           LIMIT ?""",
+        (slug, start_date, end_date, limit),
+    )

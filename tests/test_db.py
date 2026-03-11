@@ -10,6 +10,10 @@ from sites_report.db import (
     DbStatus,
     TableStatus,
     get_db_status,
+    get_ga_daily,
+    get_gsc_daily,
+    get_top_pages,
+    get_top_queries,
     init_db,
     insert_ga_daily,
     insert_ga_top_pages,
@@ -267,16 +271,22 @@ def test_init_db_enables_wal_mode(tmp_path):
 def test_table_status_rejects_negative_row_count():
     with pytest.raises(ValueError, match="row_count must be non-negative"):
         TableStatus(
-            name="ga_daily", row_count=-1,
-            min_date=None, max_date=None, last_fetched_at=None,
+            name="ga_daily",
+            row_count=-1,
+            min_date=None,
+            max_date=None,
+            last_fetched_at=None,
         )
 
 
 def test_table_status_rejects_empty_name():
     with pytest.raises(ValueError, match="name must not be empty"):
         TableStatus(
-            name="", row_count=0,
-            min_date=None, max_date=None, last_fetched_at=None,
+            name="",
+            row_count=0,
+            min_date=None,
+            max_date=None,
+            last_fetched_at=None,
         )
 
 
@@ -292,8 +302,11 @@ def test_db_status_rejects_invalid_schema_version():
 def test_db_status_rejects_wrong_table_names():
     tables = tuple(
         TableStatus(
-            name="wrong", row_count=0,
-            min_date=None, max_date=None, last_fetched_at=None,
+            name="wrong",
+            row_count=0,
+            min_date=None,
+            max_date=None,
+            last_fetched_at=None,
         )
         for _ in DATA_TABLES
     )
@@ -404,12 +417,18 @@ def test_insert_gsc_top_queries_stores_rows(tmp_path):
 
     queries = [
         {
-            "query": "python tutorial", "clicks": 20,
-            "impressions": 500, "ctr": 0.04, "position": 5.1,
+            "query": "python tutorial",
+            "clicks": 20,
+            "impressions": 500,
+            "ctr": 0.04,
+            "position": 5.1,
         },
         {
-            "query": "flask guide", "clicks": 10,
-            "impressions": 300, "ctr": 0.03, "position": 8.2,
+            "query": "flask guide",
+            "clicks": 10,
+            "impressions": 300,
+            "ctr": 0.03,
+            "position": 8.2,
         },
     ]
     insert_gsc_top_queries(db_path, "my-site", "2025-03-01", queries)
@@ -446,3 +465,182 @@ def test_insert_gsc_top_queries_replaces_stale_data(tmp_path):
 
     queries = {r[0] for r in rows}
     assert queries == {"new query 1", "new query 2"}
+
+
+# ── Query helpers ──────────────────────────────────────────────────
+
+
+def test_get_ga_daily_returns_rows_in_date_order(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    insert_ga_daily(db_path, "site-a", "2025-03-03", {"sessions": 30})
+    insert_ga_daily(db_path, "site-a", "2025-03-01", {"sessions": 10})
+    insert_ga_daily(db_path, "site-a", "2025-03-02", {"sessions": 20})
+
+    rows = get_ga_daily(db_path, "site-a", "2025-03-01", "2025-03-03")
+
+    assert len(rows) == 3
+    assert [r["date"] for r in rows] == ["2025-03-01", "2025-03-02", "2025-03-03"]
+    assert [r["sessions"] for r in rows] == [10, 20, 30]
+
+
+def test_get_ga_daily_filters_by_slug(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    insert_ga_daily(db_path, "site-a", "2025-03-01", {"sessions": 10})
+    insert_ga_daily(db_path, "site-b", "2025-03-01", {"sessions": 99})
+
+    rows = get_ga_daily(db_path, "site-a", "2025-03-01", "2025-03-01")
+
+    assert len(rows) == 1
+    assert rows[0]["sessions"] == 10
+
+
+def test_get_ga_daily_returns_empty_for_no_data(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+
+    rows = get_ga_daily(db_path, "site-a", "2025-03-01", "2025-03-07")
+
+    assert rows == []
+
+
+def test_get_gsc_daily_returns_rows_in_date_order(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    insert_gsc_daily(db_path, "site-a", "2025-03-02", {"clicks": 20})
+    insert_gsc_daily(db_path, "site-a", "2025-03-01", {"clicks": 10})
+
+    rows = get_gsc_daily(db_path, "site-a", "2025-03-01", "2025-03-02")
+
+    assert len(rows) == 2
+    assert [r["date"] for r in rows] == ["2025-03-01", "2025-03-02"]
+    assert [r["clicks"] for r in rows] == [10, 20]
+
+
+def test_get_gsc_daily_filters_by_slug(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    insert_gsc_daily(db_path, "site-a", "2025-03-01", {"clicks": 10})
+    insert_gsc_daily(db_path, "site-b", "2025-03-01", {"clicks": 99})
+
+    rows = get_gsc_daily(db_path, "site-a", "2025-03-01", "2025-03-01")
+
+    assert len(rows) == 1
+    assert rows[0]["clicks"] == 10
+
+
+def test_get_top_pages_aggregates_across_days(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    insert_ga_top_pages(
+        db_path,
+        "site-a",
+        "2025-03-01",
+        [
+            {"page_path": "/home", "pageviews": 100, "sessions": 80, "avg_time_on_page": 30.0},
+            {"page_path": "/about", "pageviews": 50, "sessions": 40, "avg_time_on_page": 20.0},
+        ],
+    )
+    insert_ga_top_pages(
+        db_path,
+        "site-a",
+        "2025-03-02",
+        [
+            {"page_path": "/home", "pageviews": 120, "sessions": 90, "avg_time_on_page": 35.0},
+        ],
+    )
+
+    rows = get_top_pages(db_path, "site-a", "2025-03-01", "2025-03-02")
+
+    assert rows[0]["page_path"] == "/home"
+    assert rows[0]["pageviews"] == 220  # 100 + 120
+    assert rows[0]["sessions"] == 170  # 80 + 90
+
+
+def test_get_top_pages_respects_limit(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    pages = [
+        {"page_path": f"/page-{i}", "pageviews": 100 - i, "sessions": 50, "avg_time_on_page": 10.0}
+        for i in range(15)
+    ]
+    insert_ga_top_pages(db_path, "site-a", "2025-03-01", pages)
+
+    rows = get_top_pages(db_path, "site-a", "2025-03-01", "2025-03-01", limit=5)
+
+    assert len(rows) == 5
+
+
+def test_get_top_queries_aggregates_across_days(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    insert_gsc_top_queries(
+        db_path,
+        "site-a",
+        "2025-03-01",
+        [
+            {
+                "query": "python tutorial",
+                "clicks": 20,
+                "impressions": 500,
+                "ctr": 0.04,
+                "position": 5.0,
+            },
+        ],
+    )
+    insert_gsc_top_queries(
+        db_path,
+        "site-a",
+        "2025-03-02",
+        [
+            {
+                "query": "python tutorial",
+                "clicks": 30,
+                "impressions": 600,
+                "ctr": 0.05,
+                "position": 4.0,
+            },
+        ],
+    )
+
+    rows = get_top_queries(db_path, "site-a", "2025-03-01", "2025-03-02")
+
+    assert rows[0]["query"] == "python tutorial"
+    assert rows[0]["clicks"] == 50  # 20 + 30
+    assert rows[0]["impressions"] == 1100  # 500 + 600
+
+
+def test_get_top_queries_respects_limit(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    queries = [
+        {
+            "query": f"query-{i}",
+            "clicks": 100 - i,
+            "impressions": 1000,
+            "ctr": 0.05,
+            "position": 3.0,
+        }
+        for i in range(25)
+    ]
+    insert_gsc_top_queries(db_path, "site-a", "2025-03-01", queries)
+
+    rows = get_top_queries(db_path, "site-a", "2025-03-01", "2025-03-01", limit=10)
+
+    assert len(rows) == 10
+
+
+def test_get_top_queries_returns_empty_for_no_data(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+
+    rows = get_top_queries(db_path, "site-a", "2025-03-01", "2025-03-07")
+
+    assert rows == []
+
+
+def test_query_helpers_raise_on_missing_db(tmp_path):
+    db_path = tmp_path / "nonexistent.db"
+    with pytest.raises(DatabaseError, match="Database file not found"):
+        get_ga_daily(db_path, "site-a", "2025-03-01", "2025-03-07")
