@@ -833,14 +833,14 @@ def test_markdown_to_html_empty_string():
 
 
 def test_markdown_to_html_escapes_html_tags():
-    md = '- <script>alert(1)</script>'
+    md = "- <script>alert(1)</script>"
     result = _markdown_to_html(md)
     assert "<script>" not in result
     assert "&lt;script&gt;" in result
 
 
 def test_markdown_to_html_escapes_html_in_bold():
-    md = '- **<img src=x>bold**'
+    md = "- **<img src=x>bold**"
     result = _markdown_to_html(md)
     assert "<img" not in result
     assert "&lt;img src=x&gt;" in result

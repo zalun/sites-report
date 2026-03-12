@@ -39,9 +39,7 @@ def generate_highlights(
         return None
 
     try:
-        prompt = _build_prompt(
-            project_name, schedule, ga4_metrics, gsc_metrics, pages, queries
-        )
+        prompt = _build_prompt(project_name, schedule, ga4_metrics, gsc_metrics, pages, queries)
     except (KeyError, TypeError) as exc:
         logger.warning("Failed to build AI highlights prompt for '%s': %s", project_name, exc)
         return None
@@ -170,15 +168,14 @@ def _build_prompt(
             ctr = f"{q['ctr']:.1%}" if q.get("ctr") is not None else "N/A"
             pos = f"{q['position']:.1f}" if q.get("position") is not None else "N/A"
             lines.append(
-                f"- \"{q['query']}\": {q['clicks']} clicks, "
+                f'- "{q["query"]}": {q["clicks"]} clicks, '
                 f"{q['impressions']} impressions, "
                 f"{ctr} CTR, position {pos}"
             )
         lines.append("")
 
     lines.append(
-        'Respond with 2-4 bullet points starting with "- ". '
-        "No headers, no preamble, no sign-off."
+        'Respond with 2-4 bullet points starting with "- ". No headers, no preamble, no sign-off.'
     )
     return "\n".join(lines)
 
@@ -188,7 +185,6 @@ def _format_metrics_table(metrics: list[dict]) -> str:
     lines = []
     for m in metrics:
         lines.append(
-            f"- {m['label']}: {m['current']} (previous: {m['previous']}, "
-            f"change: {m['change']})"
+            f"- {m['label']}: {m['current']} (previous: {m['previous']}, change: {m['change']})"
         )
     return "\n".join(lines)

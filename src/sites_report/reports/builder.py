@@ -221,10 +221,7 @@ def _compare_metric(
 
 def _all_zeros(data: list[dict], metrics: tuple[_MetricDef, ...]) -> bool:
     """Return True if every metric aggregates to zero across both current and previous."""
-    return all(
-        _aggregate(data, m.key, m.aggregate) == 0.0
-        for m in metrics
-    )
+    return all(_aggregate(data, m.key, m.aggregate) == 0.0 for m in metrics)
 
 
 def _encode_chart(png_bytes: bytes | None) -> str | None:
@@ -238,7 +235,11 @@ _RE_BOLD = re.compile(r"\*\*(.+?)\*\*")
 
 
 def _markdown_to_html(text: str) -> str:
-    """Convert simple markdown (bold + bullet lists) to inline HTML."""
+    """Convert simple markdown (bold + bullet lists) to inline HTML.
+
+    Output is used with Jinja2 ``|safe`` — all text content is HTML-escaped
+    before tag insertion.
+    """
     lines = text.split("\n")
     html_parts: list[str] = []
     in_list = False
@@ -461,7 +462,8 @@ def _build_project_context(
     try:
         pages_data = (
             get_top_pages(db_path, project.slug, current_start, current_end)
-            if ga4_has_data else None
+            if ga4_has_data
+            else None
         )
     except DatabaseError:
         logger.warning(
@@ -473,7 +475,8 @@ def _build_project_context(
     try:
         queries_data = (
             get_top_queries(db_path, project.slug, current_start, current_end)
-            if gsc_has_data else None
+            if gsc_has_data
+            else None
         )
     except DatabaseError:
         logger.warning(
