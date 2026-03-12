@@ -426,17 +426,24 @@ def _build_project_context(
             get_top_pages(db_path, project.slug, current_start, current_end)
             if ga4_has_data else None
         )
+    except DatabaseError:
+        logger.warning(
+            "DB error fetching pages for AI highlights on '%s'",
+            project.slug,
+            exc_info=True,
+        )
+        pages_data = None
+    try:
         queries_data = (
             get_top_queries(db_path, project.slug, current_start, current_end)
             if gsc_has_data else None
         )
     except DatabaseError:
         logger.warning(
-            "DB error fetching pages/queries for AI highlights on '%s'",
+            "DB error fetching queries for AI highlights on '%s'",
             project.slug,
             exc_info=True,
         )
-        pages_data = None
         queries_data = None
     ai_highlights = generate_highlights(
         project.name, schedule, ga4_metrics, gsc_metrics, pages_data, queries_data
