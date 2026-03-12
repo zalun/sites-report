@@ -62,7 +62,7 @@ def _queries():
             "query": "example search",
             "clicks": 20,
             "impressions": 500,
-            "ctr": "4.0%",
+            "ctr": 0.04,
             "position": 3.2,
         },
     ]
@@ -218,10 +218,72 @@ def test_build_prompt_formats_metrics():
     assert "Sessions: 100" in prompt
     assert "previous: 80" in prompt
     assert "+25.0%" in prompt
+    assert "direction" not in prompt
     assert "/home" in prompt
     assert "500 pageviews" in prompt
     assert '"example search"' in prompt
     assert "20 clicks" in prompt
+    assert "4.0% CTR" in prompt
+
+
+def test_build_prompt_all_data_types():
+    prompt = _build_prompt(
+        "My Site", Schedule.DAILY, _ga4_metrics(), _gsc_metrics(), _pages(), _queries()
+    )
+    assert "## GA4 Metrics" in prompt
+    assert "## GSC Metrics" in prompt
+    assert "## Top Pages" in prompt
+    assert "## Top Search Queries" in prompt
+
+
+def test_build_prompt_daily_schedule():
+    prompt = _build_prompt("My Site", Schedule.DAILY, _ga4_metrics(), None, [], [])
+    assert "Compare against the same day last week" in prompt
+
+
+def test_build_prompt_weekly_schedule():
+    prompt = _build_prompt("My Site", Schedule.WEEKLY, _ga4_metrics(), None, [], [])
+    assert "week-over-week trends" in prompt
+
+
+def test_build_prompt_monthly_schedule():
+    prompt = _build_prompt("My Site", Schedule.MONTHLY, _ga4_metrics(), None, [], [])
+    assert "month-over-month shifts" in prompt
+
+
+def test_build_prompt_queries_ctr_as_percentage():
+    queries = [{"query": "test", "clicks": 10, "impressions": 200, "ctr": 0.035, "position": 5.7}]
+    prompt = _build_prompt("My Site", Schedule.DAILY, None, None, [], queries)
+    assert "3.5% CTR" in prompt
+    assert "position 5.7" in prompt
+
+
+def test_build_prompt_no_direction_in_output():
+    prompt = _build_prompt("My Site", Schedule.DAILY, _ga4_metrics(), _gsc_metrics(), [], [])
+    assert "direction" not in prompt
+
+
+def test_build_prompt_pages_only():
+    prompt = _build_prompt("My Site", Schedule.DAILY, None, None, _pages(), [])
+    assert "## Top Pages" in prompt
+    assert "## GA4 Metrics" not in prompt
+    assert "## GSC Metrics" not in prompt
+    assert "## Top Search Queries" not in prompt
+
+
+def test_build_prompt_queries_only():
+    prompt = _build_prompt("My Site", Schedule.DAILY, None, None, [], _queries())
+    assert "## Top Search Queries" in prompt
+    assert "## GA4 Metrics" not in prompt
+    assert "## GSC Metrics" not in prompt
+    assert "## Top Pages" not in prompt
+
+
+def test_build_prompt_queries_none_ctr_position():
+    queries = [{"query": "test", "clicks": 5, "impressions": 0, "ctr": None, "position": None}]
+    prompt = _build_prompt("My Site", Schedule.DAILY, None, None, [], queries)
+    assert "N/A CTR" in prompt
+    assert "position N/A" in prompt
 
 
 # ── _has_meaningful_data ─────────────────────────────────────────

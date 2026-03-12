@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import calendar
 import datetime
+import html as html_mod
 import logging
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -232,6 +234,41 @@ def _encode_chart(png_bytes: bytes | None) -> str | None:
     return base64.b64encode(png_bytes).decode("ascii")
 
 
+_RE_BOLD = re.compile(r"\*\*(.+?)\*\*")
+
+
+def _markdown_to_html(text: str) -> str:
+    """Convert simple markdown (bold + bullet lists) to inline HTML."""
+    lines = text.split("\n")
+    html_parts: list[str] = []
+    in_list = False
+
+    for line in lines:
+        stripped = line.strip()
+        is_item = stripped.startswith("- ")
+
+        if is_item and not in_list:
+            html_parts.append('<ul style="margin:4px 0;padding-left:20px;">')
+            in_list = True
+        elif not is_item and in_list:
+            html_parts.append("</ul>")
+            in_list = False
+
+        if is_item:
+            escaped = html_mod.escape(stripped[2:])
+            content = _RE_BOLD.sub(r"<strong>\1</strong>", escaped)
+            html_parts.append(f"<li>{content}</li>")
+        elif stripped:
+            escaped = html_mod.escape(stripped)
+            content = _RE_BOLD.sub(r"<strong>\1</strong>", escaped)
+            html_parts.append(f'<p style="margin:4px 0;">{content}</p>')
+
+    if in_list:
+        html_parts.append("</ul>")
+
+    return "\n".join(html_parts)
+
+
 def _build_charts(
     db_path: Path,
     slug: str,
@@ -257,7 +294,7 @@ def _build_charts(
         ga_trend = get_ga_daily(db_path, slug, trend_start, trend_end)
         chart_bytes = charts.sessions_users_trend(ga_trend)
         if chart_bytes is None and ga_trend:
-            logger.warning(
+            logger.debug(
                 "Chart 'sessions_users' returned None despite %d data rows for '%s'",
                 len(ga_trend),
                 slug,
@@ -267,7 +304,7 @@ def _build_charts(
         pages = get_top_pages(db_path, slug, current_start, current_end)
         chart_bytes = charts.top_pages(pages)
         if chart_bytes is None and pages:
-            logger.warning(
+            logger.debug(
                 "Chart 'top_pages' returned None despite %d data rows for '%s'",
                 len(pages),
                 slug,
@@ -278,7 +315,7 @@ def _build_charts(
         gsc_trend = get_gsc_daily(db_path, slug, trend_start, trend_end)
         chart_bytes = charts.gsc_clicks_impressions_trend(gsc_trend)
         if chart_bytes is None and gsc_trend:
-            logger.warning(
+            logger.debug(
                 "Chart 'gsc_trend' returned None despite %d data rows for '%s'",
                 len(gsc_trend),
                 slug,
@@ -288,7 +325,7 @@ def _build_charts(
         queries = get_top_queries(db_path, slug, current_start, current_end)
         chart_bytes = charts.top_search_queries(queries)
         if chart_bytes is None and queries:
-            logger.warning(
+            logger.debug(
                 "Chart 'top_queries' returned None despite %d data rows for '%s'",
                 len(queries),
                 slug,
@@ -445,9 +482,18 @@ def _build_project_context(
             exc_info=True,
         )
         queries_data = None
-    ai_highlights = generate_highlights(
-        project.name, schedule, ga4_metrics, gsc_metrics, pages_data, queries_data
-    )
+    try:
+        ai_highlights_raw = generate_highlights(
+            project.name, schedule, ga4_metrics, gsc_metrics, pages_data, queries_data
+        )
+    except Exception:  # noqa: BLE001 — safety net for non-critical feature
+        logger.warning(
+            "Unexpected error generating AI highlights for '%s'",
+            project.slug,
+            exc_info=True,
+        )
+        ai_highlights_raw = None
+    ai_highlights = _markdown_to_html(ai_highlights_raw) if ai_highlights_raw else None
 
     return {
         "name": project.name,

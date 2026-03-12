@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from pathlib import Path
 from unittest import mock
 
@@ -22,6 +23,7 @@ from sites_report.reports.builder import (
     _encode_chart,
     _format_change,
     _format_value,
+    _markdown_to_html,
     _MetricDef,
     build_report,
 )
@@ -730,7 +732,10 @@ def test_build_report_raises_when_no_projects_match():
 # ── AI highlights integration ────────────────────────────────────
 
 
-@mock.patch(f"{_P}.generate_highlights", return_value="- Sessions up 25%")
+@mock.patch(
+    f"{_P}.generate_highlights",
+    return_value="- **Sessions up 25%**\n- Bounce rate stable",
+)
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
@@ -759,7 +764,9 @@ def test_build_report_includes_ai_highlights(
         Schedule.DAILY,
         datetime.date(2025, 3, 10),
     )
-    assert "Sessions up 25%" in report.html
+    assert "<strong>Sessions up 25%</strong>" in report.html
+    assert "Bounce rate stable" in report.html
+    assert "<li>" in report.html
     assert "AI Highlights" in report.html
 
 
@@ -793,3 +800,87 @@ def test_build_report_ai_highlights_none(
         datetime.date(2025, 3, 10),
     )
     assert "AI Highlights" not in report.html
+
+
+# ── Markdown to HTML conversion ──────────────────────────────────
+
+
+def test_markdown_to_html_bullet_list():
+    md = "- First item\n- Second item"
+    html = _markdown_to_html(md)
+    assert "<ul" in html
+    assert "<li>First item</li>" in html
+    assert "<li>Second item</li>" in html
+    assert "</ul>" in html
+
+
+def test_markdown_to_html_bold():
+    md = "- **Traffic doubled** this week"
+    html = _markdown_to_html(md)
+    assert "<strong>Traffic doubled</strong>" in html
+
+
+def test_markdown_to_html_plain_paragraph():
+    md = "No bullets here, just text."
+    html = _markdown_to_html(md)
+    assert "<p" in html
+    assert "No bullets here, just text." in html
+    assert "<ul" not in html
+
+
+def test_markdown_to_html_empty_string():
+    assert _markdown_to_html("") == ""
+
+
+def test_markdown_to_html_escapes_html_tags():
+    md = '- <script>alert(1)</script>'
+    result = _markdown_to_html(md)
+    assert "<script>" not in result
+    assert "&lt;script&gt;" in result
+
+
+def test_markdown_to_html_escapes_html_in_bold():
+    md = '- **<img src=x>bold**'
+    result = _markdown_to_html(md)
+    assert "<img" not in result
+    assert "&lt;img src=x&gt;" in result
+    assert "<strong>" in result
+
+
+# ── generate_highlights unexpected exception ─────────────────────
+
+
+@mock.patch(f"{_P}.generate_highlights", side_effect=RuntimeError("boom"))
+@mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.sessions_users_trend", return_value=_png_stub())
+@mock.patch(f"{_P}.get_top_queries", return_value=[])
+@mock.patch(f"{_P}.get_top_pages", return_value=[])
+@mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
+@mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
+def test_build_report_survives_highlights_exception(
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
+    _m_highlights,
+    sample_project_both,
+    sample_subscription,
+    caplog,
+):
+    with caplog.at_level(logging.WARNING):
+        report = build_report(
+            Path("/fake/db"),
+            sample_subscription,
+            (sample_project_both,),
+            Schedule.DAILY,
+            datetime.date(2025, 3, 10),
+        )
+    assert report.html
+    assert "AI Highlights" not in report.html
+    assert "Unexpected error" in caplog.text

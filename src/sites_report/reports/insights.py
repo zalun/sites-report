@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT_SECONDS = 30
 
+_SCHEDULE_GUIDANCE = {
+    Schedule.DAILY: "Compare against the same day last week.",
+    Schedule.WEEKLY: "Look for week-over-week trends.",
+    Schedule.MONTHLY: "Focus on month-over-month shifts and long-term trends.",
+}
+assert set(_SCHEDULE_GUIDANCE) == set(Schedule), (
+    f"_SCHEDULE_GUIDANCE missing variants: {set(Schedule) - set(_SCHEDULE_GUIDANCE)}"
+)
+
 
 def generate_highlights(
     project_name: str,
@@ -131,7 +140,8 @@ def _build_prompt(
         f"You are an analytics assistant. Analyze the following data for {project_name} "
         f"({schedule} report) and provide 2-4 concise highlights. "
         "Focus on: significant changes, unusual patterns, notable trends. "
-        "Be specific with numbers.",
+        "Be specific with numbers. "
+        f"{_SCHEDULE_GUIDANCE[schedule]}",
         "",
     ]
 
@@ -157,14 +167,19 @@ def _build_prompt(
     if queries:
         lines.append("## Top Search Queries")
         for q in queries:
+            ctr = f"{q['ctr']:.1%}" if q.get("ctr") is not None else "N/A"
+            pos = f"{q['position']:.1f}" if q.get("position") is not None else "N/A"
             lines.append(
                 f"- \"{q['query']}\": {q['clicks']} clicks, "
                 f"{q['impressions']} impressions, "
-                f"{q['ctr']} CTR, position {q['position']}"
+                f"{ctr} CTR, position {pos}"
             )
         lines.append("")
 
-    lines.append("Respond with bullet points only, no headers or preamble.")
+    lines.append(
+        'Respond with 2-4 bullet points starting with "- ". '
+        "No headers, no preamble, no sign-off."
+    )
     return "\n".join(lines)
 
 
@@ -174,6 +189,6 @@ def _format_metrics_table(metrics: list[dict]) -> str:
     for m in metrics:
         lines.append(
             f"- {m['label']}: {m['current']} (previous: {m['previous']}, "
-            f"change: {m['change']}, direction: {m['direction']})"
+            f"change: {m['change']})"
         )
     return "\n".join(lines)
