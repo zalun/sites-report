@@ -14,7 +14,13 @@ from typing import Literal
 import jinja2
 
 from sites_report.config import ProjectConfig, Schedule, SubscriptionConfig
-from sites_report.db import get_ga_daily, get_gsc_daily, get_top_pages, get_top_queries
+from sites_report.db import (
+    DatabaseError,
+    get_ga_daily,
+    get_gsc_daily,
+    get_top_pages,
+    get_top_queries,
+)
 from sites_report.reports import charts
 from sites_report.reports.insights import generate_highlights
 
@@ -400,17 +406,38 @@ def _build_project_context(
 
     # AI highlights
     ga4_metrics_raw = ga4_ctx.get("metrics") if ga4_ctx else None
+    if ga4_metrics_raw is not None and not isinstance(ga4_metrics_raw, list):
+        logger.warning(
+            "Unexpected ga4 metrics type for '%s': %s",
+            project.slug,
+            type(ga4_metrics_raw).__name__,
+        )
     ga4_metrics = ga4_metrics_raw if isinstance(ga4_metrics_raw, list) else None
     gsc_metrics_raw = gsc_ctx.get("metrics") if gsc_ctx else None
+    if gsc_metrics_raw is not None and not isinstance(gsc_metrics_raw, list):
+        logger.warning(
+            "Unexpected gsc metrics type for '%s': %s",
+            project.slug,
+            type(gsc_metrics_raw).__name__,
+        )
     gsc_metrics = gsc_metrics_raw if isinstance(gsc_metrics_raw, list) else None
-    pages_data = (
-        get_top_pages(db_path, project.slug, current_start, current_end)
-        if ga4_has_data else None
-    )
-    queries_data = (
-        get_top_queries(db_path, project.slug, current_start, current_end)
-        if gsc_has_data else None
-    )
+    try:
+        pages_data = (
+            get_top_pages(db_path, project.slug, current_start, current_end)
+            if ga4_has_data else None
+        )
+        queries_data = (
+            get_top_queries(db_path, project.slug, current_start, current_end)
+            if gsc_has_data else None
+        )
+    except DatabaseError:
+        logger.warning(
+            "DB error fetching pages/queries for AI highlights on '%s'",
+            project.slug,
+            exc_info=True,
+        )
+        pages_data = None
+        queries_data = None
     ai_highlights = generate_highlights(
         project.name, schedule, ga4_metrics, gsc_metrics, pages_data, queries_data
     )
