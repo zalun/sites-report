@@ -21,6 +21,13 @@ _PATCH_CREDS = "sites_report.collectors.analytics.build_google_credentials"
 _PATCH_CLIENT = "sites_report.collectors.analytics.BetaAnalyticsDataClient"
 
 
+def _grpc_unavailable() -> object:
+    """Return grpc UNAVAILABLE status code, importing lazily."""
+    from grpc import StatusCode
+
+    return StatusCode.UNAVAILABLE
+
+
 def _make_project(ga4_property_id: str | None = "properties/123456") -> ProjectConfig:
     return ProjectConfig(
         name="Test Site",
@@ -195,6 +202,44 @@ def test_fetch_wraps_google_auth_error(mock_creds: MagicMock, mock_client_cls: M
 
     with pytest.raises(CollectorError, match="GA4 API error"):
         collector.fetch(_make_project(), _DATE)
+
+
+# -- retry behaviour --
+
+
+@mock.patch("sites_report.collectors.base.time.sleep")
+@mock.patch(_PATCH_CLIENT)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_retries_on_transient_api_error(
+    mock_creds: MagicMock, mock_client_cls: MagicMock, mock_sleep: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_client_cls)
+    transient = GoogleAPICallError("unavailable")
+    transient.grpc_status_code = _grpc_unavailable()
+    row = _make_row(metric_values=["10", "8", "4", "50", "12.0", "0.3", "1"])
+    collector._client.run_report.side_effect = [transient, _make_response([row])]
+
+    result = collector.fetch(_make_project(), _DATE)
+
+    assert result["sessions"] == 10
+    assert collector._client.run_report.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+@mock.patch("sites_report.collectors.base.time.sleep")
+@mock.patch(_PATCH_CLIENT)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_does_not_retry_on_auth_error(
+    mock_creds: MagicMock, mock_client_cls: MagicMock, mock_sleep: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_client_cls)
+    collector._client.run_report.side_effect = GoogleAuthError("bad creds")
+
+    with pytest.raises(CollectorError, match="GA4 API error"):
+        collector.fetch(_make_project(), _DATE)
+
+    assert collector._client.run_report.call_count == 1
+    assert mock_sleep.call_count == 0
 
 
 # -- fetch_top_pages --

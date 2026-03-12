@@ -7,7 +7,12 @@ from google.auth.exceptions import GoogleAuthError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from sites_report.collectors.base import Collector, CollectorError, build_google_credentials
+from sites_report.collectors.base import (
+    Collector,
+    CollectorError,
+    build_google_credentials,
+    retry_on_transient,
+)
 from sites_report.config import GoogleConfig, ProjectConfig
 
 logger = logging.getLogger(__name__)
@@ -71,9 +76,24 @@ class GSCCollector(Collector):
             raise CollectorError(f"No gsc_site_url configured for project '{project.slug}'")
         return project.gsc_site_url
 
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        if isinstance(exc, GoogleAuthError):
+            return False
+        if isinstance(exc, HttpError):
+            status = getattr(getattr(exc, "resp", None), "status", None)
+            return status in {429, 500, 502, 503, 504}
+        return False
+
     def _query(self, site_url: str, body: dict, slug: str, date: datetime.date) -> dict:
         try:
-            return self._service.searchanalytics().query(siteUrl=site_url, body=body).execute()
+            return retry_on_transient(
+                lambda: self._service.searchanalytics()
+                .query(siteUrl=site_url, body=body)
+                .execute(),
+                is_retryable=self._is_retryable,
+                context=f"GSC '{slug}' on {date}",
+            )
         except (HttpError, GoogleAuthError) as exc:
             logger.error("GSC API error for '%s' on %s: %s", slug, date, exc)
             raise CollectorError(f"GSC API error for '{slug}' on {date}: {exc}") from exc

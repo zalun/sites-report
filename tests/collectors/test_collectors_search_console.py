@@ -186,6 +186,56 @@ def test_fetch_wraps_google_auth_error(mock_creds: MagicMock, mock_build: MagicM
         collector.fetch(_make_project(), _DATE)
 
 
+# -- retry behaviour --
+
+
+def _make_http_error(status: int) -> HttpError:
+    resp = MagicMock()
+    resp.status = status
+    resp.reason = f"Error {status}"
+    return HttpError(resp=resp, content=b"transient")
+
+
+@mock.patch("sites_report.collectors.base.time.sleep")
+@mock.patch(_PATCH_BUILD)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_retries_on_transient_http_error(
+    mock_creds: MagicMock, mock_build: MagicMock, mock_sleep: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_build)
+    service = mock_build.return_value
+    execute = service.searchanalytics.return_value.query.return_value.execute
+    execute.side_effect = [
+        _make_http_error(503),
+        {"rows": [_make_daily_row()]},
+    ]
+
+    result = collector.fetch(_make_project(), _DATE)
+
+    assert result["clicks"] == 150
+    assert execute.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+@mock.patch("sites_report.collectors.base.time.sleep")
+@mock.patch(_PATCH_BUILD)
+@mock.patch(_PATCH_CREDS)
+def test_fetch_does_not_retry_on_auth_error(
+    mock_creds: MagicMock, mock_build: MagicMock, mock_sleep: MagicMock
+) -> None:
+    collector = _make_collector(mock_creds, mock_build)
+    service = mock_build.return_value
+    service.searchanalytics.return_value.query.return_value.execute.side_effect = GoogleAuthError(
+        "bad creds"
+    )
+
+    with pytest.raises(CollectorError, match="GSC API error"):
+        collector.fetch(_make_project(), _DATE)
+
+    assert service.searchanalytics.return_value.query.return_value.execute.call_count == 1
+    assert mock_sleep.call_count == 0
+
+
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
 def test_fetch_raises_on_missing_metric_key(mock_creds: MagicMock, mock_build: MagicMock) -> None:

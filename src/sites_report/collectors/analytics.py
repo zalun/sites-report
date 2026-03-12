@@ -15,7 +15,12 @@ from google.analytics.data_v1beta.types import (
 from google.api_core.exceptions import GoogleAPIError
 from google.auth.exceptions import GoogleAuthError
 
-from sites_report.collectors.base import Collector, CollectorError, build_google_credentials
+from sites_report.collectors.base import (
+    Collector,
+    CollectorError,
+    build_google_credentials,
+    retry_on_transient,
+)
 from sites_report.config import GoogleConfig, ProjectConfig
 
 logger = logging.getLogger(__name__)
@@ -100,11 +105,36 @@ class GA4Collector(Collector):
             pid = f"properties/{pid}"
         return pid
 
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        if isinstance(exc, GoogleAuthError):
+            return False
+        if isinstance(exc, GoogleAPIError):
+            code = getattr(exc, "grpc_status_code", None)
+            if code is not None:
+                from grpc import StatusCode
+
+                return code in {
+                    StatusCode.UNAVAILABLE,  # HTTP 503
+                    StatusCode.DEADLINE_EXCEEDED,  # HTTP 504
+                    StatusCode.RESOURCE_EXHAUSTED,  # HTTP 429
+                    StatusCode.INTERNAL,  # HTTP 500
+                }
+            # Fallback: check HTTP status code for non-gRPC transports.
+            http_code = getattr(exc, "code", None)
+            if http_code is not None:
+                return http_code in {429, 500, 502, 503, 504}
+        return False
+
     def _run_report(
         self, request: RunReportRequest, slug: str, date: datetime.date
     ) -> RunReportResponse:
         try:
-            return self._client.run_report(request)
+            return retry_on_transient(
+                lambda: self._client.run_report(request),
+                is_retryable=self._is_retryable,
+                context=f"GA4 '{slug}' on {date}",
+            )
         except (GoogleAPIError, GoogleAuthError) as exc:
             logger.error("GA4 API error for '%s' on %s: %s", slug, date, exc)
             raise CollectorError(f"GA4 API error for '{slug}' on {date}: {exc}") from exc
