@@ -46,7 +46,7 @@ def retry_on_transient[T](
                 retryable = is_retryable(exc)
             except Exception:  # noqa: BLE001
                 logger.debug("is_retryable check failed, treating as non-retryable", exc_info=True)
-                raise exc from exc
+                raise exc from None
             if not retryable or attempt + 1 >= max_attempts:
                 if attempt > 0 and attempt + 1 >= max_attempts:
                     ctx = f" ({context})" if context else ""
