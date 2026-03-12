@@ -311,6 +311,7 @@ def _png_stub() -> bytes:
     return b"\x89PNG\r\nfake"
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
@@ -328,6 +329,7 @@ def test_build_report_returns_report_dataclass(
     _m_gt,
     _m_tq,
     _m_tp,
+    _m_hi,
     sample_project_both,
     sample_subscription,
 ):
@@ -343,6 +345,7 @@ def test_build_report_returns_report_dataclass(
     assert report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
@@ -360,6 +363,7 @@ def test_build_report_html_contains_project_name(
     _m_gt,
     _m_tq,
     _m_tp,
+    _m_hi,
     sample_project_both,
     sample_subscription,
 ):
@@ -373,6 +377,7 @@ def test_build_report_html_contains_project_name(
     assert "My Site" in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
 @mock.patch(f"{_P}.get_top_queries", return_value=[])
@@ -382,6 +387,7 @@ def test_build_report_ga4_none_when_no_property_id(
     _m_queries,
     _m_gt,
     _m_tq,
+    _m_hi,
     sample_subscription,
 ):
     project = ProjectConfig(name="GSC Only", slug="my-site", gsc_site_url="https://example.com")
@@ -395,6 +401,7 @@ def test_build_report_ga4_none_when_no_property_id(
     assert "Google Analytics" not in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.sessions_users_trend", return_value=_png_stub())
 @mock.patch(f"{_P}.get_top_pages", return_value=[])
@@ -404,6 +411,7 @@ def test_build_report_gsc_none_when_no_site_url(
     _m_pages,
     _m_su,
     _m_tp,
+    _m_hi,
     sample_subscription,
 ):
     project = ProjectConfig(name="GA4 Only", slug="my-site", ga4_property_id="properties/123")
@@ -417,6 +425,7 @@ def test_build_report_gsc_none_when_no_site_url(
     assert "Search Console" not in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=None)
 @mock.patch(f"{_P}.charts.sessions_users_trend", return_value=None)
 @mock.patch(f"{_P}.get_top_pages", return_value=[])
@@ -426,6 +435,7 @@ def test_build_report_ga4_none_when_no_data(
     _m_pages,
     _m_su,
     _m_tp,
+    _m_hi,
     sample_subscription,
 ):
     project = ProjectConfig(name="Empty GA4", slug="my-site", ga4_property_id="properties/123")
@@ -471,6 +481,7 @@ def test_all_zeros_true_for_empty_data():
     assert _all_zeros([], _GA4_METRICS) is True
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.get_top_queries", return_value=[])
 @mock.patch(f"{_P}.get_top_pages", return_value=[])
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
@@ -480,6 +491,7 @@ def test_build_report_ga4_no_movement_when_all_zeros(
     _m_gsc,
     _m_pages,
     _m_queries,
+    _m_hi,
     sample_project_both,
     sample_subscription,
 ):
@@ -496,6 +508,7 @@ def test_build_report_ga4_no_movement_when_all_zeros(
     assert "Sessions" not in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.get_top_queries", return_value=[])
 @mock.patch(f"{_P}.get_top_pages", return_value=[])
 @mock.patch(f"{_P}.get_gsc_daily", return_value=_make_zero_gsc_rows())
@@ -505,6 +518,7 @@ def test_build_report_gsc_no_movement_when_all_zeros(
     _m_gsc,
     _m_pages,
     _m_queries,
+    _m_hi,
     sample_project_both,
     sample_subscription,
 ):
@@ -521,6 +535,7 @@ def test_build_report_gsc_no_movement_when_all_zeros(
     assert "Clicks" not in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.sessions_users_trend", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.get_top_queries", return_value=[])
@@ -534,6 +549,7 @@ def test_build_report_skips_charts_for_zero_source(
     _m_queries,
     m_tp,
     m_su,
+    _m_hi,
     sample_project_both,
     sample_subscription,
 ):
@@ -551,6 +567,7 @@ def test_build_report_skips_charts_for_zero_source(
     assert "Clicks and Impressions" not in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
@@ -568,6 +585,7 @@ def test_build_report_calls_chart_functions(
     m_gt,
     m_tq,
     m_tp,
+    _m_hi,
     sample_project_both,
     sample_subscription,
 ):
@@ -584,6 +602,7 @@ def test_build_report_calls_chart_functions(
     assert m_tp.call_count == 1
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
@@ -601,6 +620,7 @@ def test_build_report_encodes_charts_as_base64(
     _m_gt,
     _m_tq,
     _m_tp,
+    _m_hi,
     sample_project_both,
     sample_subscription,
 ):
@@ -614,6 +634,7 @@ def test_build_report_encodes_charts_as_base64(
     assert "data:image/png;base64," in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
@@ -631,6 +652,7 @@ def test_build_report_multiple_projects(
     _m_gt,
     _m_tq,
     _m_tp,
+    _m_hi,
 ):
     p1 = ProjectConfig(name="Site A", slug="site-a", ga4_property_id="p/1")
     p2 = ProjectConfig(name="Site B", slug="site-b", gsc_site_url="https://b.com")
@@ -650,6 +672,7 @@ def test_build_report_multiple_projects(
     assert "Site B" in report.html
 
 
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
 @mock.patch(f"{_P}.charts.top_pages", return_value=None)
 @mock.patch(f"{_P}.charts.top_search_queries", return_value=None)
 @mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=None)
@@ -667,6 +690,7 @@ def test_build_report_empty_db_still_renders(
     _m_gt,
     _m_tq,
     _m_tp,
+    _m_hi,
     sample_subscription,
 ):
     project = ProjectConfig(
@@ -701,3 +725,71 @@ def test_build_report_raises_when_no_projects_match():
             Schedule.DAILY,
             datetime.date(2025, 3, 10),
         )
+
+
+# ── AI highlights integration ────────────────────────────────────
+
+
+@mock.patch(f"{_P}.generate_highlights", return_value="- Sessions up 25%")
+@mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.sessions_users_trend", return_value=_png_stub())
+@mock.patch(f"{_P}.get_top_queries", return_value=[])
+@mock.patch(f"{_P}.get_top_pages", return_value=[])
+@mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
+@mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
+def test_build_report_includes_ai_highlights(
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
+    _m_highlights,
+    sample_project_both,
+    sample_subscription,
+):
+    report = build_report(
+        Path("/fake/db"),
+        sample_subscription,
+        (sample_project_both,),
+        Schedule.DAILY,
+        datetime.date(2025, 3, 10),
+    )
+    assert "Sessions up 25%" in report.html
+    assert "AI Highlights" in report.html
+
+
+@mock.patch(f"{_P}.generate_highlights", return_value=None)
+@mock.patch(f"{_P}.charts.top_pages", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.top_search_queries", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.gsc_clicks_impressions_trend", return_value=_png_stub())
+@mock.patch(f"{_P}.charts.sessions_users_trend", return_value=_png_stub())
+@mock.patch(f"{_P}.get_top_queries", return_value=[])
+@mock.patch(f"{_P}.get_top_pages", return_value=[])
+@mock.patch(f"{_P}.get_gsc_daily", return_value=_make_gsc_rows())
+@mock.patch(f"{_P}.get_ga_daily", return_value=_make_ga4_rows())
+def test_build_report_ai_highlights_none(
+    _m_ga,
+    _m_gsc,
+    _m_pages,
+    _m_queries,
+    _m_su,
+    _m_gt,
+    _m_tq,
+    _m_tp,
+    _m_highlights,
+    sample_project_both,
+    sample_subscription,
+):
+    report = build_report(
+        Path("/fake/db"),
+        sample_subscription,
+        (sample_project_both,),
+        Schedule.DAILY,
+        datetime.date(2025, 3, 10),
+    )
+    assert "AI Highlights" not in report.html

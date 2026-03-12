@@ -16,6 +16,7 @@ import jinja2
 from sites_report.config import ProjectConfig, Schedule, SubscriptionConfig
 from sites_report.db import get_ga_daily, get_gsc_daily, get_top_pages, get_top_queries
 from sites_report.reports import charts
+from sites_report.reports.insights import generate_highlights
 
 logger = logging.getLogger(__name__)
 
@@ -397,13 +398,30 @@ def _build_project_context(
         db_path, project.slug, ranges, has_ga4=ga4_has_data, has_gsc=gsc_has_data
     )
 
+    # AI highlights
+    ga4_metrics_raw = ga4_ctx.get("metrics") if ga4_ctx else None
+    ga4_metrics = ga4_metrics_raw if isinstance(ga4_metrics_raw, list) else None
+    gsc_metrics_raw = gsc_ctx.get("metrics") if gsc_ctx else None
+    gsc_metrics = gsc_metrics_raw if isinstance(gsc_metrics_raw, list) else None
+    pages_data = (
+        get_top_pages(db_path, project.slug, current_start, current_end)
+        if ga4_has_data else None
+    )
+    queries_data = (
+        get_top_queries(db_path, project.slug, current_start, current_end)
+        if gsc_has_data else None
+    )
+    ai_highlights = generate_highlights(
+        project.name, schedule, ga4_metrics, gsc_metrics, pages_data, queries_data
+    )
+
     return {
         "name": project.name,
         "period": _build_period_label(schedule, ranges),
         "comparison_label": _build_comparison_labels(schedule, ranges),
         "ga4": ga4_ctx,
         "gsc": gsc_ctx,
-        "ai_highlights": None,
+        "ai_highlights": ai_highlights,
         "charts": chart_data,
     }
 
