@@ -109,7 +109,7 @@ def test_fetch_returns_daily_metrics(mock_creds: MagicMock, mock_build: MagicMoc
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_returns_none_values_when_no_rows(
+def test_fetch_returns_zeros_when_no_rows(
     mock_creds: MagicMock, mock_build: MagicMock
 ) -> None:
     collector = _make_collector(mock_creds, mock_build)
@@ -121,16 +121,16 @@ def test_fetch_returns_none_values_when_no_rows(
     result = collector.fetch(_make_project(), _DATE)
 
     assert result == {
-        "clicks": None,
-        "impressions": None,
-        "ctr": None,
-        "avg_position": None,
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0.0,
+        "avg_position": 0.0,
     }
 
 
 @mock.patch(_PATCH_BUILD)
 @mock.patch(_PATCH_CREDS)
-def test_fetch_returns_none_values_when_rows_key_missing(
+def test_fetch_returns_zeros_when_rows_key_missing(
     mock_creds: MagicMock, mock_build: MagicMock
 ) -> None:
     collector = _make_collector(mock_creds, mock_build)
@@ -140,10 +140,10 @@ def test_fetch_returns_none_values_when_rows_key_missing(
     result = collector.fetch(_make_project(), _DATE)
 
     assert result == {
-        "clicks": None,
-        "impressions": None,
-        "ctr": None,
-        "avg_position": None,
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0.0,
+        "avg_position": 0.0,
     }
 
 

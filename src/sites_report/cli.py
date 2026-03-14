@@ -24,6 +24,8 @@ from sites_report.config import (
 from sites_report.db import (
     DatabaseError,
     get_db_status,
+    get_ga_daily,
+    get_gsc_daily,
     init_db,
     insert_ga_daily,
     insert_ga_top_pages,
@@ -338,6 +340,67 @@ def fetch(
         raise SystemExit(1)
 
 
+def _ensure_data_fetched(
+    cfg: Config,
+    report_date: datetime.date,
+    schedule: Schedule,
+) -> None:
+    """Fetch missing data for the report date range if a prior fetch was skipped.
+
+    This handles the common case where the scheduled fetch cron did not run
+    (e.g. the machine was asleep) but the report cron fires later.
+    """
+    from sites_report.reports.builder import _compute_date_ranges
+
+    ranges = _compute_date_ranges(schedule, report_date)
+    # Collect all dates in the current period that need data
+    days = (ranges.current_end - ranges.current_start).days + 1
+    needed_dates = [ranges.current_start + datetime.timedelta(days=i) for i in range(days)]
+
+    # Check which dates are missing from the database
+    missing: list[datetime.date] = []
+    for d in needed_dates:
+        d_iso = d.isoformat()
+        has_ga = bool(get_ga_daily(cfg.db_path, cfg.projects[0].slug, d_iso, d_iso))
+        has_gsc = bool(get_gsc_daily(cfg.db_path, cfg.projects[0].slug, d_iso, d_iso))
+        if not has_ga and not has_gsc:
+            missing.append(d)
+
+    if not missing:
+        return
+
+    logger.info("Auto-backfill: fetching %d missing date(s): %s", len(missing), missing)
+
+    # Instantiate collectors
+    ga4_collector = None
+    gsc_collector = None
+    if cfg.google:
+        google_cfg = cfg.google
+
+        def _make_ga4():
+            from sites_report.collectors.analytics import GA4Collector
+
+            return GA4Collector(google_cfg)
+
+        def _make_gsc():
+            from sites_report.collectors.search_console import GSCCollector
+
+            return GSCCollector(google_cfg)
+
+        ga4_collector = _init_collector("GA4", _make_ga4)
+        gsc_collector = _init_collector("GSC", _make_gsc)
+
+    failures: list[str] = []
+    for date in missing:
+        for project in cfg.projects:
+            _fetch_project(project, date, cfg.db_path, ga4_collector, gsc_collector, failures)
+
+    if failures:
+        logger.warning("Auto-backfill had %d failure(s): %s", len(failures), failures)
+    else:
+        logger.info("Auto-backfill complete")
+
+
 def _default_report_date(schedule: Schedule, today: datetime.date | None = None) -> datetime.date:
     """Compute a sensible default report date for the given schedule.
 
@@ -434,6 +497,8 @@ def report(
     except DatabaseError as exc:
         click.echo(f"Database error: {exc}", err=True)
         raise SystemExit(1) from exc
+
+    _ensure_data_fetched(cfg, report_date, sched)
 
     matching = [s for s in cfg.subscriptions if s.schedule == sched]
     if not matching:
