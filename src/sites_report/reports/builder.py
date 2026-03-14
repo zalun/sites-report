@@ -46,7 +46,7 @@ class Report:
             raise ValueError(msg)
 
 
-# ── Internal dataclasses ──────────────────────────────────────────
+# ── Dataclasses ──────────────────────────────────────────────────
 
 
 @dataclass(frozen=True, slots=True)

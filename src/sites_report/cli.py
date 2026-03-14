@@ -355,6 +355,8 @@ def _ensure_data_fetched(
     This handles the common case where the scheduled fetch cron did not run
     (e.g. the machine was asleep) but the report cron fires later.
     Best-effort: failures are logged and reported but do not abort the report.
+
+    Caller must have called ``init_db`` before invoking this function.
     """
     from sites_report.reports.builder import compute_date_ranges
 
@@ -365,6 +367,7 @@ def _ensure_data_fetched(
         ranges = compute_date_ranges(schedule, report_date)
     except ValueError:
         logger.warning("Cannot compute date ranges for auto-backfill", exc_info=True)
+        click.echo("Warning: could not determine date range for auto-backfill.", err=True)
         return
 
     days = (ranges.current_end - ranges.current_start).days + 1
@@ -373,6 +376,7 @@ def _ensure_data_fetched(
     # Check which (date, project) pairs are missing data.
     # Only check sources the project is actually configured to collect.
     missing_pairs: list[tuple[datetime.date, ProjectConfig]] = []
+    db_check_failed = False
     for d in needed_dates:
         d_iso = d.isoformat()
         for project in cfg.projects:
@@ -389,11 +393,24 @@ def _ensure_data_fetched(
                 )
             except DatabaseError:
                 logger.error(
-                    "DB error checking data for '%s' on %s", project.slug, d_iso, exc_info=True
+                    "DB error checking data for '%s' on %s",
+                    project.slug,
+                    d_iso,
+                    exc_info=True,
                 )
-                has_ga = has_gsc = False
+                db_check_failed = True
+                break
             if not has_ga or not has_gsc:
                 missing_pairs.append((d, project))
+        if db_check_failed:
+            break
+
+    if db_check_failed:
+        click.echo(
+            "Warning: could not verify data completeness (database error).",
+            err=True,
+        )
+        return
 
     if not missing_pairs:
         return

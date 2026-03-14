@@ -101,6 +101,9 @@ class GSCCollector(Collector):
     def _parse_daily(self, response: dict) -> dict[str, int | float | str | None]:
         rows = response.get("rows", [])
         if not rows:
+            # Store explicit zeros so downstream aggregation and chart rendering
+            # don't need to special-case None.  Trade-off: a GSC API outage
+            # returning empty rows becomes indistinguishable from zero traffic.
             logger.debug("GSC returned no rows for daily query — storing zeros")
             return {db_col: typ(0) for db_col, typ in _DAILY_METRICS.values()}
         row = rows[0]
