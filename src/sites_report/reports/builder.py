@@ -108,7 +108,7 @@ _JINJA_ENV = jinja2.Environment(
 # ── Private helpers ───────────────────────────────────────────────
 
 
-def _compute_date_ranges(schedule: Schedule, report_date: datetime.date) -> _DateRanges:
+def compute_date_ranges(schedule: Schedule, report_date: datetime.date) -> _DateRanges:
     """Compute current, previous, and trend date ranges for the given schedule."""
     if schedule == Schedule.DAILY:
         current_start = current_end = report_date
@@ -541,7 +541,7 @@ def build_report(
     Queries data from SQLite, computes period-over-period comparisons,
     generates charts, and renders the final HTML email.
     """
-    ranges = _compute_date_ranges(schedule, report_date)
+    ranges = compute_date_ranges(schedule, report_date)
     subject = _build_subject(schedule, report_date)
 
     project_contexts = []

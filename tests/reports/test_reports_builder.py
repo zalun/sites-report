@@ -19,13 +19,13 @@ from sites_report.reports.builder import (
     _build_period_label,
     _build_subject,
     _compare_metric,
-    _compute_date_ranges,
     _encode_chart,
     _format_change,
     _format_value,
     _markdown_to_html,
     _MetricDef,
     build_report,
+    compute_date_ranges,
 )
 
 _P = "sites_report.reports.builder"
@@ -35,44 +35,44 @@ _P = "sites_report.reports.builder"
 
 
 def test_date_ranges_daily_current():
-    r = _compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
+    r = compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
     assert r.current_start == datetime.date(2025, 3, 10)
     assert r.current_end == datetime.date(2025, 3, 10)
 
 
 def test_date_ranges_daily_previous():
-    r = _compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
+    r = compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
     assert r.previous_start == datetime.date(2025, 3, 3)
     assert r.previous_end == datetime.date(2025, 3, 3)
 
 
 def test_date_ranges_daily_trend():
-    r = _compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
+    r = compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
     assert r.trend_start == datetime.date(2025, 2, 9)
     assert r.trend_end == datetime.date(2025, 3, 10)
 
 
 def test_date_ranges_weekly_current():
     # 2025-03-12 is a Wednesday → week starts Mon 03-10
-    r = _compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
+    r = compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
     assert r.current_start == datetime.date(2025, 3, 10)
     assert r.current_end == datetime.date(2025, 3, 16)
 
 
 def test_date_ranges_weekly_previous():
-    r = _compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
+    r = compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
     assert r.previous_start == datetime.date(2025, 3, 3)
     assert r.previous_end == datetime.date(2025, 3, 9)
 
 
 def test_date_ranges_monthly_current():
-    r = _compute_date_ranges(Schedule.MONTHLY, datetime.date(2025, 3, 15))
+    r = compute_date_ranges(Schedule.MONTHLY, datetime.date(2025, 3, 15))
     assert r.current_start == datetime.date(2025, 3, 1)
     assert r.current_end == datetime.date(2025, 3, 31)
 
 
 def test_date_ranges_monthly_previous():
-    r = _compute_date_ranges(Schedule.MONTHLY, datetime.date(2025, 3, 15))
+    r = compute_date_ranges(Schedule.MONTHLY, datetime.date(2025, 3, 15))
     assert r.previous_start == datetime.date(2025, 2, 1)
     assert r.previous_end == datetime.date(2025, 2, 28)
 
@@ -241,26 +241,26 @@ def test_encode_chart_none_input():
 
 
 def test_build_period_label_daily():
-    ranges = _compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
+    ranges = compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
     label = _build_period_label(Schedule.DAILY, ranges)
     assert "Mar 10, 2025" in label
 
 
 def test_build_period_label_weekly():
-    ranges = _compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
+    ranges = compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
     label = _build_period_label(Schedule.WEEKLY, ranges)
     assert " - " in label
 
 
 def test_build_comparison_labels_daily():
-    ranges = _compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
+    ranges = compute_date_ranges(Schedule.DAILY, datetime.date(2025, 3, 10))
     labels = _build_comparison_labels(Schedule.DAILY, ranges)
     assert labels["current"] == "Mar 10"
     assert labels["previous"] == "Mar 03"
 
 
 def test_build_comparison_labels_weekly():
-    ranges = _compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
+    ranges = compute_date_ranges(Schedule.WEEKLY, datetime.date(2025, 3, 12))
     labels = _build_comparison_labels(Schedule.WEEKLY, ranges)
     assert " - " in labels["current"]
     assert " - " in labels["previous"]
