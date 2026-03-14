@@ -50,7 +50,7 @@ class Report:
 
 
 @dataclass(frozen=True, slots=True)
-class _DateRanges:
+class DateRanges:
     current_start: datetime.date
     current_end: datetime.date
     previous_start: datetime.date
@@ -108,7 +108,7 @@ _JINJA_ENV = jinja2.Environment(
 # ── Private helpers ───────────────────────────────────────────────
 
 
-def compute_date_ranges(schedule: Schedule, report_date: datetime.date) -> _DateRanges:
+def compute_date_ranges(schedule: Schedule, report_date: datetime.date) -> DateRanges:
     """Compute current, previous, and trend date ranges for the given schedule."""
     if schedule == Schedule.DAILY:
         current_start = current_end = report_date
@@ -135,7 +135,7 @@ def compute_date_ranges(schedule: Schedule, report_date: datetime.date) -> _Date
     else:
         msg = f"Unknown schedule: {schedule!r}"
         raise ValueError(msg)
-    return _DateRanges(
+    return DateRanges(
         current_start=current_start,
         current_end=current_end,
         previous_start=previous_start,
@@ -273,7 +273,7 @@ def _markdown_to_html(text: str) -> str:
 def _build_charts(
     db_path: Path,
     slug: str,
-    ranges: _DateRanges,
+    ranges: DateRanges,
     *,
     has_ga4: bool,
     has_gsc: bool,
@@ -353,7 +353,7 @@ def _build_subject(schedule: Schedule, report_date: datetime.date) -> str:
     return f"Sites Report ({label}): {date_str}"
 
 
-def _build_period_label(schedule: Schedule, ranges: _DateRanges) -> str:
+def _build_period_label(schedule: Schedule, ranges: DateRanges) -> str:
     """Human-readable period label."""
     if schedule == Schedule.DAILY:
         return ranges.current_start.strftime("%b %d, %Y")
@@ -362,7 +362,7 @@ def _build_period_label(schedule: Schedule, ranges: _DateRanges) -> str:
     return f"{cur_start} - {cur_end}"
 
 
-def _build_comparison_labels(schedule: Schedule, ranges: _DateRanges) -> dict:
+def _build_comparison_labels(schedule: Schedule, ranges: DateRanges) -> dict:
     """Labels for current and previous period columns."""
     if schedule == Schedule.DAILY:
         return {
@@ -383,7 +383,7 @@ def _build_project_context(
     db_path: Path,
     project: ProjectConfig,
     schedule: Schedule,
-    ranges: _DateRanges,
+    ranges: DateRanges,
 ) -> dict:
     """Build the full template context for a single project."""
     current_start = ranges.current_start.isoformat()

@@ -370,34 +370,44 @@ def _ensure_data_fetched(
     days = (ranges.current_end - ranges.current_start).days + 1
     needed_dates = [ranges.current_start + datetime.timedelta(days=i) for i in range(days)]
 
-    # Check which dates are missing — a date is missing if any project lacks data
-    missing: list[datetime.date] = []
+    # Check which (date, project) pairs are missing data.
+    # Only check sources the project is actually configured to collect.
+    missing_pairs: list[tuple[datetime.date, ProjectConfig]] = []
     for d in needed_dates:
         d_iso = d.isoformat()
         for project in cfg.projects:
+            needs_ga = bool(project.ga4_property_id)
+            needs_gsc = bool(project.gsc_site_url)
+            if not needs_ga and not needs_gsc:
+                continue
             try:
-                has_ga = bool(get_ga_daily(cfg.db_path, project.slug, d_iso, d_iso))
-                has_gsc = bool(get_gsc_daily(cfg.db_path, project.slug, d_iso, d_iso))
+                has_ga = not needs_ga or bool(
+                    get_ga_daily(cfg.db_path, project.slug, d_iso, d_iso)
+                )
+                has_gsc = not needs_gsc or bool(
+                    get_gsc_daily(cfg.db_path, project.slug, d_iso, d_iso)
+                )
             except DatabaseError:
-                logger.warning(
+                logger.error(
                     "DB error checking data for '%s' on %s", project.slug, d_iso, exc_info=True
                 )
                 has_ga = has_gsc = False
             if not has_ga or not has_gsc:
-                missing.append(d)
-                break
+                missing_pairs.append((d, project))
 
-    if not missing:
+    if not missing_pairs:
         return
 
-    logger.info("Auto-backfill: fetching %d missing date(s): %s", len(missing), missing)
+    missing_dates = sorted({d for d, _ in missing_pairs})
+    logger.info(
+        "Auto-backfill: fetching %d missing date(s): %s", len(missing_dates), missing_dates
+    )
 
     ga4_collector, gsc_collector = _init_collectors(cfg)
 
     failures: list[str] = []
-    for date in missing:
-        for project in cfg.projects:
-            _fetch_project(project, date, cfg.db_path, ga4_collector, gsc_collector, failures)
+    for date, project in missing_pairs:
+        _fetch_project(project, date, cfg.db_path, ga4_collector, gsc_collector, failures)
 
     if failures:
         logger.warning("Auto-backfill had %d failure(s): %s", len(failures), failures)
