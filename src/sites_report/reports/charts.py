@@ -9,6 +9,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ def sessions_users_trend(data: list[dict]) -> bytes | None:
         ax.plot(dates, users, color=_COLOR_SECONDARY, marker="o", markersize=4, label="Users")
         ax.set_title("Sessions & Users")
         ax.set_ylim(bottom=0)
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         ax.legend()
         _style_axes(ax)
         fig.autofmt_xdate()
@@ -96,6 +98,7 @@ def gsc_clicks_impressions_trend(data: list[dict]) -> bytes | None:
         ax1.plot(dates, clicks, color=_COLOR_PRIMARY, marker="o", markersize=4, label="Clicks")
         ax1.set_ylabel("Clicks", color=_COLOR_PRIMARY)
         ax1.set_ylim(bottom=0)
+        ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
         ax1.tick_params(axis="y", labelcolor=_COLOR_PRIMARY)
         _style_axes(ax1)
 
@@ -110,6 +113,7 @@ def gsc_clicks_impressions_trend(data: list[dict]) -> bytes | None:
         )
         ax2.set_ylabel("Impressions", color=_COLOR_SECONDARY)
         ax2.set_ylim(bottom=0)
+        ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
         ax2.tick_params(axis="y", labelcolor=_COLOR_SECONDARY)
         ax2.spines["top"].set_visible(False)
 
@@ -155,6 +159,7 @@ def top_search_queries(data: list[dict], *, limit: int = 10) -> bytes | None:
         ax.barh(queries, clicks, color=_COLOR_PRIMARY)
         ax.set_title("Top Search Queries")
         ax.set_xlabel("Clicks")
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         _style_axes(ax)
         fig.tight_layout()
 
@@ -190,6 +195,7 @@ def top_pages(data: list[dict], *, limit: int = 10) -> bytes | None:
         ax.barh(paths, views, color=_COLOR_BARS)
         ax.set_title("Top Pages")
         ax.set_xlabel("Pageviews")
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         _style_axes(ax)
         fig.tight_layout()
 

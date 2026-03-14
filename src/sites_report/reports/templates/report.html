@@ -78,10 +78,11 @@
   {% endif %}
 
   {# ── AI Highlights ────────────────────────────────── #}
+  {# SECURITY: ai_highlights is pre-sanitized by _markdown_to_html in builder.py #}
   {% if project.ai_highlights %}
   <div style="margin-bottom:20px;padding:16px;background:#f0f7ff;border-left:4px solid #4285f4;border-radius:4px;">
     <h3 style="margin:0 0 8px;color:#2c3e50;font-size:16px;">AI Highlights</h3>
-    <p style="margin:0;font-size:14px;color:#333;white-space:pre-line;">{{ project.ai_highlights }}</p>
+    <div style="margin:0;font-size:14px;color:#333;">{{ project.ai_highlights|safe }}</div>
   </div>
   {% endif %}
 
