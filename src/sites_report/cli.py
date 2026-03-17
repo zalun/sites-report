@@ -28,6 +28,7 @@ from sites_report.db import (
     get_gsc_daily,
     init_db,
     insert_ga_daily,
+    insert_ga_events,
     insert_ga_top_pages,
     insert_gsc_daily,
     insert_gsc_top_queries,
@@ -199,6 +200,19 @@ def _fetch_project(
             "GA4 top_pages",
             lambda: ga4_collector.fetch_top_pages(project, date),
             lambda d: insert_ga_top_pages(db_path, project.slug, date_iso, d),
+            project.slug,
+            date_iso,
+            failures,
+        ):
+            ok += 1
+        else:
+            bad += 1
+
+    if project.ga4_property_id and ga4_collector and project.ga4_events:
+        if _run_fetch_op(
+            "GA4 events",
+            lambda: ga4_collector.fetch_events(project, date, list(project.ga4_events)),
+            lambda d: insert_ga_events(db_path, project.slug, date_iso, d),
             project.slug,
             date_iso,
             failures,
@@ -550,7 +564,7 @@ def report(
     for idx, sub in enumerate(matching):
         sub_projects = tuple(p for p in cfg.projects if p.slug in sub.projects)
         try:
-            result = build_report(cfg.db_path, sub, sub_projects, sched, report_date)
+            result = build_report(cfg.db_path, sub, sub_projects, sched, report_date, ai_model=cfg.ai_model)
         except ValueError as exc:
             logger.warning("Skipping subscription for %s: %s", sub.recipient, exc)
             click.echo(f"Warning: skipping {sub.recipient}: {exc}", err=True)
@@ -600,6 +614,6 @@ def report(
 
     if preview and last_output_file is not None:
         try:
-            webbrowser.open(last_output_file.as_uri())
+            webbrowser.open(last_output_file.resolve().as_uri())
         except (webbrowser.Error, OSError) as exc:
             click.echo(f"Could not open browser: {exc}. View: {last_output_file}", err=True)

@@ -25,6 +25,14 @@ test-cov:
 fetch *ARGS:
     uv run sites-report fetch {{ARGS}}
 
-# Generate report without sending
-preview *ARGS:
-    uv run sites-report report --no-send --output report.html {{ARGS}}
+# Generate daily report and open in browser (DATE: YYYY-MM-DD, default: yesterday)
+daily DATE="" *ARGS:
+    uv run sites-report report --schedule daily --no-send --output report.html --preview {{ if DATE != "" { "--date " + DATE } else { "" } }} {{ARGS}}
+
+# Generate weekly report and open in browser (DATE: YYYY-MM-DD, any day in desired week)
+weekly DATE="" *ARGS:
+    uv run sites-report report --schedule weekly --no-send --output report.html --preview {{ if DATE != "" { "--date " + DATE } else { "" } }} {{ARGS}}
+
+# Generate monthly report and open in browser (DATE: YYYY-MM-DD, any day in desired month)
+monthly DATE="" *ARGS:
+    uv run sites-report report --schedule monthly --no-send --output report.html --preview {{ if DATE != "" { "--date " + DATE } else { "" } }} {{ARGS}}

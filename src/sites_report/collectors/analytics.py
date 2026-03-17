@@ -7,6 +7,8 @@ from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
     DateRange,
     Dimension,
+    Filter,
+    FilterExpression,
     Metric,
     OrderBy,
     RunReportRequest,
@@ -85,6 +87,44 @@ class GA4Collector(Collector):
         )
         response = self._run_report(request, project.slug, date)
         return self._parse_top_pages(response)
+
+    def fetch_events(
+        self,
+        project: ProjectConfig,
+        date: datetime.date,
+        event_names: list[str],
+    ) -> list[dict[str, int | str | None]]:
+        """Fetch event counts for specific event names on a given date."""
+        property_id = self._require_property_id(project)
+        date_str = date.isoformat()
+        request = RunReportRequest(
+            property=property_id,
+            date_ranges=[DateRange(start_date=date_str, end_date=date_str)],
+            dimensions=[Dimension(name="eventName")],
+            metrics=[Metric(name="eventCount")],
+            dimension_filter=FilterExpression(
+                filter=Filter(
+                    field_name="eventName",
+                    in_list_filter=Filter.InListFilter(values=event_names),
+                )
+            ),
+        )
+        response = self._run_report(request, project.slug, date)
+        return self._parse_events(response)
+
+    @staticmethod
+    def _parse_events(
+        response: RunReportResponse,
+    ) -> list[dict[str, int | str | None]]:
+        if not response.rows:
+            return []
+        events: list[dict[str, int | str | None]] = []
+        for row in response.rows:
+            event_name = row.dimension_values[0].value
+            raw_count = row.metric_values[0].value
+            event_count = int(raw_count) if raw_count else 0
+            events.append({"event_name": event_name, "event_count": event_count})
+        return events
 
     def _require_property_id(self, project: ProjectConfig) -> str:
         if not project.ga4_property_id:

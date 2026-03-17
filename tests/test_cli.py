@@ -106,7 +106,7 @@ def test_db_status_shows_schema_version(runner: CliRunner, config_path: Path) ->
 
     result = runner.invoke(cli, ["--config", str(config_path), "db-status"])
     assert result.exit_code == 0, result.output
-    assert "Schema version: 1" in result.output
+    assert "Schema version: 2" in result.output
 
 
 def test_db_status_fails_on_uninitialized_db(

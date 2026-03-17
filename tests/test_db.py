@@ -69,6 +69,7 @@ def test_init_db_creates_indexes(tmp_path):
         "idx_gsc_daily_lookup",
         "idx_gsc_queries_lookup",
         "idx_ga_pages_lookup",
+        "idx_ga_events_lookup",
         "idx_vercel_daily_lookup",
     }
     assert expected == index_names
@@ -237,7 +238,7 @@ def test_init_db_raises_on_schema_version_mismatch(tmp_path):
     conn.commit()
     conn.close()
 
-    with pytest.raises(DatabaseError, match="schema version mismatch"):
+    with pytest.raises(DatabaseError, match="newer than supported"):
         init_db(db_path)
 
 

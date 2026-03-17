@@ -28,6 +28,8 @@ def generate_highlights(
     gsc_metrics: list[dict] | None,
     pages: list[dict] | None,
     queries: list[dict] | None,
+    *,
+    ai_model: str | None = None,
 ) -> str | None:
     """Generate AI-powered highlights from analytics data.
 
@@ -44,9 +46,13 @@ def generate_highlights(
         logger.warning("Failed to build AI highlights prompt for '%s': %s", project_name, exc)
         return None
 
+    cmd = ["claude", "-p"]
+    if ai_model:
+        cmd.extend(["--model", ai_model])
+
     try:
         result = subprocess.run(
-            ["claude", "-p"],
+            cmd,
             input=prompt,
             capture_output=True,
             text=True,

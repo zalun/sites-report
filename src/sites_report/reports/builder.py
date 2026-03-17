@@ -19,6 +19,7 @@ from sites_report.config import ProjectConfig, Schedule, SubscriptionConfig
 from sites_report.db import (
     DatabaseError,
     get_ga_daily,
+    get_ga_events,
     get_gsc_daily,
     get_top_pages,
     get_top_queries,
@@ -384,6 +385,8 @@ def _build_project_context(
     project: ProjectConfig,
     schedule: Schedule,
     ranges: DateRanges,
+    *,
+    ai_model: str | None = None,
 ) -> dict:
     """Build the full template context for a single project."""
     current_start = ranges.current_start.isoformat()
@@ -487,7 +490,8 @@ def _build_project_context(
         queries_data = None
     try:
         ai_highlights_raw = generate_highlights(
-            project.name, schedule, ga4_metrics, gsc_metrics, pages_data, queries_data
+            project.name, schedule, ga4_metrics, gsc_metrics, pages_data, queries_data,
+            ai_model=ai_model,
         )
     except Exception:  # noqa: BLE001 — safety net for non-critical feature
         logger.warning(
@@ -498,12 +502,55 @@ def _build_project_context(
         ai_highlights_raw = None
     ai_highlights = _markdown_to_html(ai_highlights_raw) if ai_highlights_raw else None
 
+    # GA4 custom events
+    events_ctx = None
+    if project.ga4_events and has_ga4:
+        try:
+            event_names = list(project.ga4_events)
+            cur_events = get_ga_events(
+                db_path, project.slug, current_start, current_end, event_names
+            )
+            prev_events = get_ga_events(
+                db_path, project.slug, previous_start, previous_end, event_names
+            )
+            cur_map = {e["event_name"]: e["event_count"] or 0 for e in cur_events}
+            prev_map = {e["event_name"]: e["event_count"] or 0 for e in prev_events}
+            events_list = []
+            for name in event_names:
+                cur_val = cur_map.get(name, 0)
+                prev_val = prev_map.get(name, 0)
+                if cur_val == 0 and prev_val == 0:
+                    continue
+                pct = None if prev_val == 0 else ((cur_val - prev_val) / prev_val) * 100
+                if pct is None or pct == 0.0:
+                    direction = "neutral"
+                elif pct > 0:
+                    direction = "positive"
+                else:
+                    direction = "negative"
+                events_list.append({
+                    "name": name,
+                    "current": _format_value(float(cur_val), "integer"),
+                    "previous": _format_value(float(prev_val), "integer"),
+                    "change": _format_change(pct),
+                    "direction": direction,
+                })
+            if events_list:
+                events_ctx = events_list
+        except DatabaseError:
+            logger.warning(
+                "DB error fetching events for '%s'",
+                project.slug,
+                exc_info=True,
+            )
+
     return {
         "name": project.name,
         "period": _build_period_label(schedule, ranges),
         "comparison_label": _build_comparison_labels(schedule, ranges),
         "ga4": ga4_ctx,
         "gsc": gsc_ctx,
+        "events": events_ctx,
         "ai_highlights": ai_highlights,
         "charts": chart_data,
     }
@@ -535,6 +582,8 @@ def build_report(
     projects: tuple[ProjectConfig, ...],
     schedule: Schedule,
     report_date: datetime.date,
+    *,
+    ai_model: str | None = None,
 ) -> Report:
     """Build a complete HTML report for a subscription.
 
@@ -548,7 +597,7 @@ def build_report(
     for project in projects:
         if project.slug in subscription.projects:
             logger.debug("Building context for project '%s'", project.slug)
-            ctx = _build_project_context(db_path, project, schedule, ranges)
+            ctx = _build_project_context(db_path, project, schedule, ranges, ai_model=ai_model)
             project_contexts.append(ctx)
 
     if not project_contexts:

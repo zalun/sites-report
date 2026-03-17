@@ -64,6 +64,7 @@ class ProjectConfig:
     name: str
     slug: str
     ga4_property_id: str | None = None
+    ga4_events: tuple[str, ...] | None = None
     gsc_site_url: str | None = None
     vercel_project_id: str | None = None
 
@@ -79,6 +80,7 @@ class SubscriptionConfig:
 class Config:
     db_path: Path
     log_level: LogLevel
+    ai_model: str | None
     email: EmailConfig
     google: GoogleConfig | None
     vercel: VercelConfig | None
@@ -144,6 +146,11 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
         msg = f"Invalid log_level '{raw_log_level}', must be one of: {valid}"
         raise ConfigError(msg) from None
 
+    ai_model = general.get("ai_model")
+    if ai_model is not None and (not isinstance(ai_model, str) or not ai_model.strip()):
+        msg = "general.ai_model must be a non-empty string"
+        raise ConfigError(msg)
+
     if "email" not in data:
         msg = "Missing required [email] section"
         raise ConfigError(msg)
@@ -178,6 +185,7 @@ def load_config(path: Path, *, resolve_env: bool = True) -> Config:
     return Config(
         db_path=db_path,
         log_level=log_level,
+        ai_model=ai_model,
         email=email,
         google=google,
         vercel=vercel,
@@ -273,10 +281,27 @@ def _parse_project(data: dict, index: int) -> ProjectConfig:
     if ga4 is None and gsc is None and vercel is None:
         msg = f"Project '{slug}' has no data sources configured"
         raise ConfigError(msg)
+
+    raw_events = data.get("ga4_events")
+    ga4_events: tuple[str, ...] | None = None
+    if raw_events is not None:
+        if not isinstance(raw_events, list):
+            msg = f"'ga4_events' in projects[{index}] must be an array"
+            raise ConfigError(msg)
+        for i, ev in enumerate(raw_events):
+            if not isinstance(ev, str) or not ev.strip():
+                msg = f"'ga4_events[{i}]' in projects[{index}] must be a non-empty string"
+                raise ConfigError(msg)
+        if not ga4:
+            msg = f"Project '{slug}' has ga4_events but no ga4_property_id"
+            raise ConfigError(msg)
+        ga4_events = tuple(e.strip() for e in raw_events)
+
     return ProjectConfig(
         name=name,
         slug=slug,
         ga4_property_id=ga4,
+        ga4_events=ga4_events,
         gsc_site_url=gsc,
         vercel_project_id=vercel,
     )

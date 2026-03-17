@@ -9,13 +9,14 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION: int = 1
+SCHEMA_VERSION: int = 2
 
 DATA_TABLES: tuple[str, ...] = (
     "ga_daily",
     "gsc_daily",
     "gsc_top_queries",
     "ga_top_pages",
+    "ga_events",
     "vercel_daily",
 )
 
@@ -77,6 +78,16 @@ CREATE TABLE IF NOT EXISTS ga_top_pages (
     UNIQUE(project_slug, date, page_path)
 );
 
+CREATE TABLE IF NOT EXISTS ga_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_slug TEXT NOT NULL,
+    date TEXT NOT NULL,
+    event_name TEXT NOT NULL,
+    event_count INTEGER,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(project_slug, date, event_name)
+);
+
 CREATE TABLE IF NOT EXISTS vercel_daily (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_slug TEXT NOT NULL,
@@ -97,6 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_ga_daily_lookup ON ga_daily(project_slug, date);
 CREATE INDEX IF NOT EXISTS idx_gsc_daily_lookup ON gsc_daily(project_slug, date);
 CREATE INDEX IF NOT EXISTS idx_gsc_queries_lookup ON gsc_top_queries(project_slug, date);
 CREATE INDEX IF NOT EXISTS idx_ga_pages_lookup ON ga_top_pages(project_slug, date);
+CREATE INDEX IF NOT EXISTS idx_ga_events_lookup ON ga_events(project_slug, date);
 CREATE INDEX IF NOT EXISTS idx_vercel_daily_lookup ON vercel_daily(project_slug, date);
 """
 
@@ -182,6 +194,39 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+_MIGRATIONS: dict[int, str] = {
+    2: """\
+CREATE TABLE IF NOT EXISTS ga_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_slug TEXT NOT NULL,
+    date TEXT NOT NULL,
+    event_name TEXT NOT NULL,
+    event_count INTEGER,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(project_slug, date, event_name)
+);
+CREATE INDEX IF NOT EXISTS idx_ga_events_lookup ON ga_events(project_slug, date);
+""",
+}
+
+
+def _migrate(conn: sqlite3.Connection, from_version: int) -> None:
+    """Apply migrations from *from_version* up to SCHEMA_VERSION."""
+    for ver in range(from_version + 1, SCHEMA_VERSION + 1):
+        sql = _MIGRATIONS.get(ver)
+        if sql is None:
+            msg = f"No migration path from version {ver - 1} to {ver}"
+            logger.error(msg)
+            raise DatabaseError(msg)
+        logger.info("Migrating database schema from v%d to v%d", ver - 1, ver)
+        conn.executescript(sql)
+        conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?)",
+            (ver,),
+        )
+    conn.commit()
+
+
 def init_db(db_path: Path) -> None:
     """Create database file, parent dirs, and all tables. Idempotent."""
     try:
@@ -206,10 +251,12 @@ def init_db(db_path: Path) -> None:
             msg = "Database schema version table is empty — may be corrupt"
             logger.error(msg)
             raise DatabaseError(msg)
-        if current[0] != SCHEMA_VERSION:
+        if current[0] < SCHEMA_VERSION:
+            _migrate(conn, current[0])
+        elif current[0] > SCHEMA_VERSION:
             msg = (
-                f"Database schema version mismatch: expected {SCHEMA_VERSION}, "
-                f"found {current[0]}. Migration may be required."
+                f"Database schema version {current[0]} is newer than "
+                f"supported version {SCHEMA_VERSION}."
             )
             logger.error(msg)
             raise DatabaseError(msg)
@@ -598,3 +645,67 @@ def get_top_queries(
         (slug, start_date, end_date, limit),
         label=f"gsc_top_queries for '{slug}'",
     )
+
+
+def insert_ga_events(
+    db_path: Path,
+    project_slug: str,
+    date: str,
+    events: list[dict[str, int | str | None]],
+) -> None:
+    """Insert or replace GA4 event rows. Deletes existing rows for the slug+date first."""
+    conn = _connect(db_path)
+    try:
+        conn.execute(
+            "DELETE FROM ga_events WHERE project_slug = ? AND date = ?",
+            (project_slug, date),
+        )
+        conn.executemany(
+            """INSERT INTO ga_events
+               (project_slug, date, event_name, event_count)
+               VALUES (?, ?, ?, ?)""",
+            [
+                (
+                    project_slug,
+                    date,
+                    e.get("event_name"),
+                    e.get("event_count"),
+                )
+                for e in events
+            ],
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        conn.rollback()
+        msg = f"Failed to insert ga_events for '{project_slug}' on {date}: {exc}"
+        logger.error(msg)
+        raise DatabaseError(msg) from exc
+    finally:
+        conn.close()
+
+
+def get_ga_events(
+    db_path: Path,
+    slug: str,
+    start_date: str,
+    end_date: str,
+    event_names: list[str] | None = None,
+) -> list[dict]:
+    """Return GA4 event counts aggregated across date range."""
+    if event_names:
+        placeholders = ", ".join("?" for _ in event_names)
+        sql = f"""SELECT event_name, SUM(event_count) AS event_count
+                  FROM ga_events
+                  WHERE project_slug = ? AND date >= ? AND date <= ?
+                    AND event_name IN ({placeholders})
+                  GROUP BY event_name
+                  ORDER BY event_count DESC"""
+        params = (slug, start_date, end_date, *event_names)
+    else:
+        sql = """SELECT event_name, SUM(event_count) AS event_count
+                 FROM ga_events
+                 WHERE project_slug = ? AND date >= ? AND date <= ?
+                 GROUP BY event_name
+                 ORDER BY event_count DESC"""
+        params = (slug, start_date, end_date)
+    return _query_rows(db_path, sql, params, label=f"ga_events for '{slug}'")
