@@ -519,8 +519,6 @@ def _build_project_context(
             for name in event_names:
                 cur_val = cur_map.get(name, 0)
                 prev_val = prev_map.get(name, 0)
-                if cur_val == 0 and prev_val == 0:
-                    continue
                 pct = None if prev_val == 0 else ((cur_val - prev_val) / prev_val) * 100
                 if pct is None or pct == 0.0:
                     direction = "neutral"

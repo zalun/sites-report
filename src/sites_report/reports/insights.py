@@ -46,13 +46,13 @@ def generate_highlights(
         logger.warning("Failed to build AI highlights prompt for '%s': %s", project_name, exc)
         return None
 
-    cmd = ["claude", "-p"]
+    claude_cmd = "claude -p"
     if ai_model:
-        cmd.extend(["--model", ai_model])
+        claude_cmd += f" --model {ai_model}"
 
     try:
         result = subprocess.run(
-            cmd,
+            ["zsh", "-l", "-c", claude_cmd],
             input=prompt,
             capture_output=True,
             text=True,
